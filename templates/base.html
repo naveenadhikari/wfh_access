@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}WFH Access Portal{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/[email protected]/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark mb-4">
+        <div class="container">
+            <span class="navbar-brand">WFH Access Portal</span>
+            {% if session.get('admin_username') %}
+            <span class="text-white">
+                Admin: {{ session['admin_username'] }}
+                | <a class="text-white" href="{{ url_for('logout') }}">Logout</a>
+            </span>
+            {% elif session.get('employee_username') %}
+            <span class="text-white">
+                {{ session['employee_username'] }}
+                | <a class="text-white" href="{{ url_for('logout') }}">Logout</a>
+            </span>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ 'danger' if category == 'error' else category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

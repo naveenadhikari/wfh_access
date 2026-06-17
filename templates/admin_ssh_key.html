@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Admin SSH Key{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3>SSH Key: {{ username }}</h3>
+    {% if ssh_key_updated_at %}
+      <p class="text-muted mb-0">Last updated: {{ ssh_key_updated_at }}</p>
+    {% endif %}
+  </div>
+  <a href="{{ url_for('view_users') }}" class="btn btn-outline-secondary">Back to Users List</a>
+</div>
+
+{% if ssh_public_key %}
+  <div class="card">
+    <div class="card-body">
+      <p class="text-muted">Copy this public key when granting SSH access (e.g. Claude server).</p>
+      <textarea id="ssh-key-text" class="form-control font-monospace mb-3" rows="4" readonly>{{ ssh_public_key }}</textarea>
+      <button type="button" class="btn btn-primary" onclick="copySshKey()">Copy to clipboard</button>
+      <span id="copy-status" class="text-success ms-2" style="display:none;">Copied!</span>
+    </div>
+  </div>
+{% else %}
+  <div class="alert alert-warning">
+    This user has not uploaded an SSH public key yet.
+  </div>
+{% endif %}
+
+<script>
+function copySshKey() {
+  const textarea = document.getElementById("ssh-key-text");
+  textarea.select();
+  textarea.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(textarea.value).then(function () {
+    const status = document.getElementById("copy-status");
+    status.style.display = "inline";
+    setTimeout(function () { status.style.display = "none"; }, 2000);
+  });
+}
+</script>
+{% endblock %}

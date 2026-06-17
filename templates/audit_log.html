@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Audit Log</h3>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+</div>
+
+<table class="table table-striped">
+  <thead class="table-dark">
+    <tr>
+      <th>Time</th>
+      <th>Admin</th>
+      <th>Target User</th>
+      <th>Action</th>
+      <th>Details</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in audit_entries %}
+    <tr>
+      <td style="white-space:nowrap;">{{ e["timestamp"] }}</td>
+      <td>{{ e["admin_username"] }}</td>
+      <td><strong>{{ e["target_user"] }}</strong></td>
+      <td>{{ e["action"] }}</td>
+      <td><small><code>{{ e["details"] }}</code></small></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

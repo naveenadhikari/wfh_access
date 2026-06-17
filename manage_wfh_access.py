@@ -1,0 +1,189 @@
+import os
+import logging
+
+from flask import Flask, request, jsonify
+from access_wfh_cfg import ACCESS_MANAGER_CONF
+import boto3
+from botocore.exceptions import ClientError
+
+app = Flask(__name__)
+logger=logging.getLogger("")
+logger.setLevel(logging.INFO)
+consoleHandler=logging.StreamHandler()
+logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+consoleHandler.setFormatter(logFormatter)
+logger.addHandler(consoleHandler)
+
+def update_allowed_ips_for_web_access(access_type, ip_to_allow_log_access, emp_name):
+    status = False
+    cfg = get_access_cfg()
+    cfg_file_path = cfg["webAccessConfig"][access_type]
+    try:
+        new_lines = []
+        import re
+        reg_ex_str = r'(allow[ ]+)([\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3})(; # ' + emp_name + ')'
+        f = open(cfg_file_path)
+        lines = f.readlines()
+        found = False
+        for ln in lines:
+            rr = re.search(reg_ex_str, ln)
+            if rr:
+                found = True
+                new_lines.append(rr.group(1) + ip_to_allow_log_access + rr.group(3).strip() + "\n")
+            else:
+                new_lines.append(ln)
+        if not found:
+            new_lines.insert(0, "allow " + ip_to_allow_log_access + "; # " + emp_name + "\n")
+        f.close() 
+        new_cfg_file_path = cfg_file_path + ".new"
+        f = open(new_cfg_file_path, "w")
+        for ln in new_lines:
+            f.write(ln)
+        f.close()
+        logger.info("Updated")
+
+        import subprocess
+        command = "mv {} {} && /usr/bin/sudo -S /usr/sbin/nginx -s reload".format(new_cfg_file_path, cfg_file_path)
+        op = subprocess.Popen([command], shell=True)
+        status = True
+    except Exception as e:
+        logger.exception("Exception: {}".format(e))
+    return status
+def get_access_cfg():
+    import importlib
+    import access_wfh_cfg
+    importlib.reload(access_wfh_cfg)
+    return access_wfh_cfg.ACCESS_MANAGER_CONF
+
+def open_port_for_hp_agent_access(emp_name, ip_to_allow):
+    access_cfg = get_access_cfg()
+    agent_cfg = access_cfg["hpAgentAccessConfig"]
+    region_name = agent_cfg["region"]
+    security_group_id = agent_cfg["securityGrpId"]
+    return open_ports_for_acces(emp_name, ip_to_allow, agent_cfg["ports"], security_group_id, region_name)
+
+def grant_authorized_access(emp_name, ip_to_allow):
+    resp = {}
+    print(f"[TEST MODE] Granting access for {emp_name} at IP {ip_to_allow} (Mocked)")
+    
+    # Mock response to simulate successful network and server configurations
+    resp["logAccess"] = True
+    resp["serverMetricsAccess"] = True
+    resp["hpAgentAccess"] = {"openedCt": 1, "failedToOpenCt": 0, "alreadyOpenedCt": 0}
+    resp["ports"] = {"openedCt": 1, "failedToOpenCt": 0, "alreadyOpenedCt": 0}
+
+    return resp
+
+def get_data_from_request_inner(request):
+    logger.info("Headers:{}".format(request.headers))
+    ip_to_allow = request.headers.get("X-Forwarded-For")
+    logger.info("IP to be allowed: {}".format(ip_to_allow))
+    try:
+        logger.info(dir(request))
+        logger.info(request.data)
+    except Exception as e:
+        logger.exception(e)
+    try:
+        req_body = request.json
+        logger.info("Got request : %s" % str(req_body))
+        passw = req_body["password"]
+        emp_name = req_body["name"]
+        otp = req_body.get("otp")
+        emp_name = emp_name.lower().replace(" ", "_")
+    except Exception as e:
+        logger.exception("EXC: {}".format(e))
+    return emp_name, passw, otp, ip_to_allow
+
+def open_ports_for_acces(emp_name, ip_to_allow, ports_to_open, security_group_id, region_name):
+    status = False
+    if emp_name == "anilk":
+        cidr_ip_to_allow = ip_to_allow + "/24"
+    else:
+        cidr_ip_to_allow = ip_to_allow + "/32"
+    # ports_to_open = [22, 3306, 6379]
+    ec2 = boto3.client('ec2', region_name)
+    # Remove OLD allowed IP
+    try:
+        sec_grp_infos = ec2.describe_security_groups(GroupIds=[security_group_id])
+        for sg in sec_grp_infos["SecurityGroups"]:
+            for ip_perm in sg["IpPermissions"]:
+                for ip_range in ip_perm["IpRanges"]:
+                    if ip_range.get("Description") == emp_name:
+                        # Use .get() with -1 as default for rules that allow all traffic
+                        from_port = ip_perm.get("FromPort", -1)
+                        to_port = ip_perm.get("ToPort", -1)
+                        try:
+                            ec2.revoke_security_group_ingress(
+                                CidrIp=ip_range["CidrIp"],
+                                FromPort=from_port,
+                                GroupId=security_group_id,
+                                IpProtocol='tcp',
+                                ToPort=to_port,
+                                DryRun=False
+                                )
+                            logger.info("Removed {}:{} for {}".format(ip_range["CidrIp"], ip_perm["FromPort"], emp_name))
+                        except Exception as e:
+                            pass
+    except ClientError as e:
+        logger.exception("Exception while removing old IP. {}".format(e))
+
+    # Add new IP to white list.
+    succeeded_ct = 0
+    failed_ct = 0
+    already_opened = 0
+    for port_to_open in ports_to_open:
+        try:
+            data = ec2.authorize_security_group_ingress(
+                GroupId=security_group_id,
+                IpPermissions=[{
+                    'IpProtocol': 'tcp',
+                    'FromPort': port_to_open,
+                    'ToPort': port_to_open,
+                    'IpRanges': [{'CidrIp': cidr_ip_to_allow, 'Description': emp_name}]},
+                ])
+            succeeded_ct += 1
+            logger.info("Added {}:{} for {}".format(cidr_ip_to_allow, port_to_open, emp_name))
+        except Exception as e:
+            failed_ct += 1
+            #if e.message.find("InvalidPermission.Duplicate"):
+            if e.response['Error']['Code'] == "InvalidPermission.Duplicate":
+                already_opened += 1
+            logger.error("EXCEPTION: {}".format(e))
+    resp = {"openedCt": succeeded_ct, "failedToOpenCt": failed_ct, "alreadyOpenedCt": already_opened}
+    return resp
+
+@app.route("/allow-access", methods=['POST'])
+def allow_access():
+    import pyotp
+    response = {"status": False}
+    emp_name, passw, user_sent_otp, ip_to_allow = get_data_from_request_inner(request)
+    logger.info("EmpName: {} Pass:{} Otp: {}".format(emp_name, passw, user_sent_otp))
+    cfg = get_access_cfg()
+    error = "UnAuthorized.."
+    status = False
+    if emp_name in cfg["ALLOWED_USR_IDENTITIES"]:
+        if cfg["ALLOWED_USR_IDENTITIES"][emp_name]["password"] == passw:
+            otp_seed = cfg["ALLOWED_USR_IDENTITIES"][emp_name]["otpSeed"]
+            totp = pyotp.TOTP(otp_seed)
+            if totp.verify(user_sent_otp):
+                status = grant_authorized_access(emp_name, ip_to_allow)
+            else:
+                logger.error("Invalid OTP")
+        else:
+            logger.error("Invalid Password")
+    else:
+        logger.error("NonExistent User")
+
+    response["status"] = status
+    if not status:
+        response["error"] = error
+    else:
+        response["info"] = "Welcome {}".format(emp_name)
+
+    return jsonify(response)
+
+
+if __name__ == "__main__":
+    import os
+    PORT = os.environ.get("PORT", 6200)
+    app.run(host='0.0.0.0', port=int(PORT))

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Employee Dashboard{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h3 class="mb-1">Employee Dashboard</h3>
+        <p class="text-muted mb-0">Logged in as <strong>{{ username }}</strong></p>
+      </div>
+      <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary">Logout</a>
+    </div>
+
+    {% if access_result %}
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">WFH Access</h5>
+        <p class="text-muted mb-3">Network access has been opened for your current IP.</p>
+        <pre class="bg-light p-3 border mb-0">{{ access_result }}</pre>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">SSH Key Status</h5>
+        {% if ssh_public_key %}
+          <p class="mb-1"><span class="badge bg-success">Uploaded</span></p>
+          <p class="text-muted small mb-0">Last updated: {{ ssh_key_updated_at or "—" }}</p>
+        {% else %}
+          <p class="mb-0"><span class="badge bg-warning text-dark">Not uploaded yet</span></p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Upload SSH Public Key</h5>
+        <p class="text-muted">
+          Paste your public key (<code>~/.ssh/id_ed25519.pub</code> or
+          <code>~/.ssh/id_rsa.pub</code>).
+        </p>
+        <form method="POST">
+          <div class="mb-3">
+            <label class="form-label">SSH public key</label>
+            <textarea name="ssh_public_key" class="form-control font-monospace" rows="4"
+                      placeholder="ssh-ed25519 AAAA... user@laptop">{{ ssh_public_key or "" }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Save SSH Key</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}WFH Users{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>WFH Users ({{ users|length }})</h3>
+  <div>
+    <a href="{{ url_for('add_user') }}" class="btn btn-primary me-2">+ Add New User</a>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+  </div>
+</div>
+
+<table class="table table-striped table-hover">
+  <thead class="table-dark">
+    <tr>
+      <th>Username</th>
+      <th>Log Access</th>
+      <th>Metrics Access</th>
+      <th>HP Agent Access</th>
+      <th>Ports</th>
+      <th>OTP Seed</th>
+      <th>SSH Key</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for username, u in users.items() %}
+    <tr>
+      <td><strong>{{ username }}</strong></td>
+      <td>{{ "Yes" if u.get("allowLogAccess") else "No" }}</td>
+      <td>{{ "Yes" if u.get("allowServerMetricsAccess") else "No" }}</td>
+      <td>{{ "Yes" if u.get("allowHpAgentAccess") else "No" }}</td>
+      <td>{{ u.get("portsToOpen", []) | join(", ") or "—" }}</td>
+      <td><code style="font-size:0.72em;">{{ u.get("otpSeed", "") }}</code></td>
+      <td>
+        {% set ssh = ssh_key_status.get(username, {}) %}
+        {% if ssh.get("has_key") %}
+          <span class="badge bg-success">Uploaded</span>
+        {% else %}
+          <span class="badge bg-secondary">None</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('view_user_ssh_key', username=username) }}"
+           class="btn btn-sm btn-outline-info me-1">SSH Key</a>
+        <a href="{{ url_for('edit_user', username=username) }}"
+           class="btn btn-sm btn-outline-primary me-1">Edit</a>
+
+        <form method="POST" action="{{ url_for('delete_user', username=username) }}"
+              style="display:inline;"
+              onsubmit="return confirm('Delete user {{ username }}? This cannot be undone.')">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

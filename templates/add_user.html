@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Add New User{% endblock %}
+{% block content %}
+<h3>Add New User</h3>
+<form method="POST">
+  <div class="mb-3">
+    <label class="form-label">Username</label>
+    <input type="text" name="username" class="form-control" required pattern="[a-zA-Z0-9._-]+">
+    <div class="form-text">Letters, numbers, dots, underscores, hyphens only.</div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Role Template</label>
+    <select name="role_template" class="form-select" id="roleSelect">
+      <option value="">-- Custom (choose manually below) --</option>
+      {% for t in role_templates %}
+      <option value="{{ t['id'] }}">{{ t['name'] }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Selecting a template pre-fills the options below. You can still adjust them.</div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Access permissions</label>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="allow_log_access" id="allowLog">
+      <label class="form-check-label" for="allowLog">Log access (nginx dashboard)</label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="allow_metrics_access" id="allowMetrics">
+      <label class="form-check-label" for="allowMetrics">Server metrics access</label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="allow_hp_agent_access" id="allowHpAgent">
+      <label class="form-check-label" for="allowHpAgent">HP Agent access (SSH port 22 on dedicated SG)</label>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Ports to open (comma-separated, applies to default regions)</label>
+    <input type="text" name="ports_to_open" id="portsToOpen" class="form-control" value="22" placeholder="e.g. 22,3306">
+    <div class="form-text">Leave empty to skip opening security-group ports for default regions.</div>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Create User</button>
+</form>
+
+<script>
+
+const templates = {{ role_templates_json | safe }};
+document.getElementById('roleSelect').addEventListener('change', function() {
+    const t = templates[this.value];
+    if (!t) return; // "Custom" selected, leave as-is
+    document.getElementById('allowLog').checked = !!t.allow_log_access;
+    document.getElementById('allowMetrics').checked = !!t.allow_metrics_access;
+    document.getElementById('allowHpAgent').checked = !!t.allow_hp_agent_access;
+    document.getElementById('portsToOpen').value = t.ports_to_open.join(',');
+});
+</script>
+{% endblock %}

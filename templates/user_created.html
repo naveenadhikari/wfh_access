@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}User Created{% endblock %}
+{% block content %}
+<h3>User "{{ username }}" created successfully</h3>
+
+<div class="alert alert-warning">
+  Save these details now — the password will not be shown again.
+</div>
+
+<table class="table table-bordered w-auto">
+  <tr><th>Username</th><td>{{ username }}</td></tr>
+  <tr><th>Password</th><td><code>{{ password }}</code></td></tr>
+</table>
+
+<h5>Authenticator setup (one-time)</h5>
+<p>Scan this QR code with Google Authenticator. This is a <strong>unique QR code for {{ username }}</strong> — it only needs to be scanned once and works across all servers (including bastion).</p>
+<img src="data:image/png;base64,{{ qr_code_b64 }}" alt="OTP QR Code" style="max-width:250px;">
+
+<p class="mt-2">Or manually enter this seed in the authenticator app:</p>
+<code>{{ otp_seed }}</code>
+
+<h5 class="mt-4">Access granted</h5>
+<ul>
+  <li>Log access: {{ "Yes" if access_summary.allow_log_access else "No" }}</li>
+  <li>Metrics access: {{ "Yes" if access_summary.allow_metrics_access else "No" }}</li>
+  <li>HP Agent access: {{ "Yes" if access_summary.allow_hp_agent_access else "No" }}</li>
+  <li>Ports to open: {{ access_summary.ports_to_open or "none" }}</li>
+</ul>
+
+<a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+{% endblock %}

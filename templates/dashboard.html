@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WFH Access - Admin Dashboard</title>
+    <!-- Use Inter font for modern typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 240px;
+            --header-height: 64px;
+            --bg-color: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --primary: #2563EB;
+            --text-main: #1F2937;
+            --text-muted: #6B7280;
+            --border: #E5E7EB;
+            --radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- Sidebar --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--card-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            height: var(--header-height);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--text-main);
+        }
+
+        .sidebar-menu {
+            padding: 24px 16px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .menu-item:hover {
+            background-color: #F1F5F9;
+            color: var(--text-main);
+        }
+
+        .menu-item.active {
+            background-color: #EFF6FF;
+            color: var(--primary);
+        }
+
+        .menu-divider {
+            height: 1px;
+            background-color: var(--border);
+            margin: 16px 0;
+        }
+
+        /* --- Main Area --- */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-color);
+        }
+
+        /* --- Header --- */
+        .top-header {
+            height: var(--header-height);
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 32px;
+            flex-shrink: 0;
+        }
+
+        .profile-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            background-color: #DBEAFE;
+            color: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .username {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .logout-btn {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            margin-left: 16px;
+            font-weight: 500;
+            padding-left: 16px;
+            border-left: 1px solid var(--border);
+            transition: color 0.2s;
+        }
+
+        .logout-btn:hover {
+            color: #DC2626; /* red on hover for logout */
+        }
+
+        /* --- Content --- */
+        .content {
+            flex: 1;
+            padding: 48px;
+            overflow-y: auto;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            letter-spacing: -0.02em;
+        }
+
+        .welcome-msg {
+            color: var(--text-muted);
+            font-size: 15px;
+            margin: 0 0 40px 0;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+
+        .action-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            transition: all 0.2s ease;
+        }
+
+        .action-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            color: var(--primary);
+        }
+
+        .card-desc {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        /* --- Flash Messages --- */
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 24px;
+            font-weight: 500;
+            background-color: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #34D399;
+        }
+        .alert.alert-error {
+            background-color: #FEF2F2;
+            color: #991B1B;
+            border-color: #FCA5A5;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+    <div class="sidebar-header">
+        Admin Access
+    </div>
+    <div class="sidebar-menu">
+        <a href="{{ url_for('dashboard') }}" class="menu-item active">Dashboard</a>
+        <!-- Future connection placeholders -->
+        <a href="#" class="menu-item">AWS Region Management</a>
+        <a href="#" class="menu-item">Button 2</a>
+    </div>
+</div>
+
+<!-- Main Area -->
+<div class="main-wrapper">
+    <!-- Header -->
+    <div class="top-header">
+        <div class="profile-info">
+            <div class="avatar">
+                <!-- Fallback to 'A' if session username is missing -->
+                {{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}
+            </div>
+            <div class="username">{{ session['admin_username'] or 'admin' }}</div>
+            <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div>
+            {% for category, message in messages %}
+              <div class="alert {% if category == 'error' %}alert-error{% endif %}">{{ message }}</div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <h1 class="page-title">Dashboard</h1>
+        <p class="welcome-msg">Welcome {{ session['admin_username'] or 'admin' }}</p>
+
+        <div class="cards-grid">
+            <!-- Card 1 -->
+            <a href="{{ url_for('add_user') }}" class="action-card">
+                <h2 class="card-title">Add New User</h2>
+                <p class="card-desc">Create a new WFH access account</p>
+            </a>
+
+            <!-- Card 2 -->
+            <a href="{{ url_for('view_users') }}" class="action-card">
+                <h2 class="card-title">View Users</h2>
+                <p class="card-desc">See all users, edit or delete them</p>
+            </a>
+
+            <!-- Card 3 -->
+            <a href="{{ url_for('view_audit_log') }}" class="action-card">
+                <h2 class="card-title">Audit Log</h2>
+                <p class="card-desc">See recent admin activity</p>
+            </a>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
