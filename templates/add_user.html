@@ -1,52 +1,284 @@
-{% extends "base.html" %}
+{% extends "admin_layout.html" %}
 {% block title %}Add New User{% endblock %}
 {% block content %}
-<h3>Add New User</h3>
-<form method="POST">
-  <div class="mb-3">
-    <label class="form-label">Username</label>
-    <input type="text" name="username" class="form-control" required pattern="[a-zA-Z0-9._-]+">
-    <div class="form-text">Letters, numbers, dots, underscores, hyphens only.</div>
-  </div>
 
-  <div class="mb-3">
-    <label class="form-label">Role Template</label>
-    <select name="role_template" class="form-select" id="roleSelect">
-      <option value="">-- Custom (choose manually below) --</option>
-      {% for t in role_templates %}
-      <option value="{{ t['id'] }}">{{ t['name'] }}</option>
-      {% endfor %}
-    </select>
-    <div class="form-text">Selecting a template pre-fills the options below. You can still adjust them.</div>
-  </div>
+<style>
+    .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+    }
 
-  <div class="mb-3">
-    <label class="form-label">Access permissions</label>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="allow_log_access" id="allowLog">
-      <label class="form-check-label" for="allowLog">Log access (nginx dashboard)</label>
+    .form-group {
+        margin-bottom: 24px;
+    }
+
+    .form-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .form-text {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+
+    /* Toggle Switches */
+    .custom-switch {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+    }
+
+    .switch input { 
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #CBD5E1;
+        transition: .3s;
+        border-radius: 24px;
+    }
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .3s;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    input:checked + .slider {
+        background-color: var(--primary);
+    }
+
+    input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+
+    .switch-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-main);
+        cursor: pointer;
+    }
+
+    .override-row {
+        background-color: #F8FAFC;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: end;
+        gap: 16px;
+    }
+
+    .override-col {
+        flex: 1;
+    }
+
+    .btn-remove {
+        background-color: #FEF2F2;
+        color: #DC2626;
+        border: 1px solid #FECACA;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-remove:hover {
+        background-color: #FEE2E2;
+    }
+
+    .btn-add-outline {
+        background-color: #FFFFFF;
+        color: var(--primary);
+        border: 1px dashed var(--primary);
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+        text-align: center;
+    }
+
+    .btn-add-outline:hover {
+        background-color: #EFF6FF;
+    }
+
+    .actions-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 32px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+    }
+
+    .btn-black {
+        background-color: #111827;
+        color: #FFFFFF;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+    }
+    
+    .btn-black:hover {
+        background-color: #000000;
+        color: #FFFFFF;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="page-title" style="font-size:24px; margin-bottom: 4px;">Add New User</h1>
+        <p class="text-muted" style="margin-bottom:0;">Create a new employee WFH access account.</p>
     </div>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="allow_metrics_access" id="allowMetrics">
-      <label class="form-check-label" for="allowMetrics">Server metrics access</label>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="allow_hp_agent_access" id="allowHpAgent">
-      <label class="form-check-label" for="allowHpAgent">HP Agent access (SSH port 22 on dedicated SG)</label>
-    </div>
-  </div>
+</div>
 
-  <div class="mb-3">
-    <label class="form-label">Ports to open (comma-separated, applies to default regions)</label>
-    <input type="text" name="ports_to_open" id="portsToOpen" class="form-control" value="22" placeholder="e.g. 22,3306">
-    <div class="form-text">Leave empty to skip opening security-group ports for default regions.</div>
-  </div>
+<div class="card-custom">
+    <form method="POST">
+        <!-- Section 1: User Information -->
+        <h3 class="section-title">1. User Information</h3>
+        <div class="row form-group">
+            <div class="col-md-6">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-control" required pattern="[a-zA-Z0-9._-]+" placeholder="e.g. john.doe">
+                <div class="form-text">Letters, numbers, dots, underscores, hyphens only.</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Role Template</label>
+                <select name="role_template" class="form-select" id="roleSelect">
+                    <option value="">-- Custom (choose manually below) --</option>
+                    {% for t in role_templates %}
+                    <option value="{{ t['id'] }}">{{ t['name'] }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Pre-fills permissions based on role.</div>
+            </div>
+        </div>
 
-  <button type="submit" class="btn btn-primary">Create User</button>
-</form>
+        <!-- Section 2: Access Permissions -->
+        <h3 class="section-title mt-4">2. Access Permissions</h3>
+        <div class="form-group p-3 bg-light border rounded">
+            <div class="custom-switch">
+                <label class="switch">
+                    <input type="checkbox" name="allow_log_access" id="allowLog">
+                    <span class="slider"></span>
+                </label>
+                <label class="switch-label" for="allowLog">Log Access</label>
+            </div>
+            <div class="custom-switch">
+                <label class="switch">
+                    <input type="checkbox" name="allow_metrics_access" id="allowMetrics">
+                    <span class="slider"></span>
+                </label>
+                <label class="switch-label" for="allowMetrics">Server Metrics Access</label>
+            </div>
+            <div class="custom-switch mb-0">
+                <label class="switch">
+                    <input type="checkbox" name="allow_hp_agent_access" id="allowHpAgent">
+                    <span class="slider"></span>
+                </label>
+                <label class="switch-label" for="allowHpAgent">HP Agent Access</label>
+            </div>
+        </div>
+
+        <!-- Section 3: Network Configuration -->
+        <h3 class="section-title mt-4">3. Network Configuration</h3>
+        <div class="form-group">
+            <label class="form-label">Global Ports to Open</label>
+            <input type="text" name="ports_to_open" id="portsToOpen" class="form-control" value="22" placeholder="e.g. 22, 3306">
+            <div class="form-text">Leave empty to skip opening security-group ports for default regions.</div>
+        </div>
+
+        <!-- Section 4: Region Overrides -->
+        <h3 class="section-title mt-4">4. Region Overrides</h3>
+        <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">
+            If you specify overrides below, the user will <strong>ONLY</strong> have access to these specific regions and security groups, ignoring global ports completely.
+        </p>
+        
+        <div id="regionOverridesContainer">
+            <!-- Dynamic rows will be added here -->
+        </div>
+        
+        <button type="button" class="btn-add-outline" onclick="addOverrideRow()">+ Add Region Override</button>
+
+        <div class="actions-bar">
+            <button type="submit" class="btn-black">Create User</button>
+        </div>
+    </form>
+</div>
 
 <script>
+function addOverrideRow(region = '', sgs = '', ports = '') {
+    const container = document.getElementById('regionOverridesContainer');
+    const row = document.createElement('div');
+    row.className = 'override-row';
+    row.innerHTML = `
+        <div class="override-col" style="flex: 0.8">
+            <label class="form-label" style="font-size: 11px;">Region Name</label>
+            <input type="text" name="override_region[]" class="form-control" placeholder="e.g. ap-south-1" value="${region}">
+        </div>
+        <div class="override-col" style="flex: 1.5">
+            <label class="form-label" style="font-size: 11px;">Security Group IDs</label>
+            <input type="text" name="override_sgs[]" class="form-control" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
+        </div>
+        <div class="override-col" style="flex: 1">
+            <label class="form-label" style="font-size: 11px;">Ports to Open</label>
+            <input type="text" name="override_ports[]" class="form-control" placeholder="e.g. 22, 443" value="${ports}">
+        </div>
+        <div>
+            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()">Remove</button>
+        </div>
+    `;
+    container.appendChild(row);
+}
+</script>
 
+<script>
 const templates = {{ role_templates_json | safe }};
 document.getElementById('roleSelect').addEventListener('change', function() {
     const t = templates[this.value];
@@ -57,4 +289,5 @@ document.getElementById('roleSelect').addEventListener('change', function() {
     document.getElementById('portsToOpen').value = t.ports_to_open.join(',');
 });
 </script>
+
 {% endblock %}

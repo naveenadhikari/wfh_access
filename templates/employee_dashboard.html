@@ -1,55 +1,415 @@
-{% extends "base.html" %}
-{% block title %}Employee Dashboard{% endblock %}
-{% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-8">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h3 class="mb-1">Employee Dashboard</h3>
-        <p class="text-muted mb-0">Logged in as <strong>{{ username }}</strong></p>
-      </div>
-      <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary">Logout</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Employee Portal - WFH Access</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #0F172A;
+            --text-muted: #64748B;
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --success: #16A34A;
+            --border: #E2E8F0;
+            --radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Top Navigation */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .nav-brand {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .nav-brand-icon {
+            background-color: var(--primary);
+            color: white;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-info {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+        
+        .user-info strong {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .btn-logout {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 6px 16px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background-color: #F1F5F9;
+            color: var(--text-main);
+        }
+
+        /* Main Content Container */
+        .container {
+            max-width: 800px;
+            margin: 48px auto;
+            padding: 0 24px;
+        }
+
+        .flash-messages {
+            margin-bottom: 24px;
+        }
+        
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 12px;
+        }
+        
+        .alert-success { background-color: #DCFCE7; color: #166534; border: 1px solid #BBF7D0; }
+        .alert-error { background-color: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+
+        /* Cards */
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            background-color: #F8FAFC;
+        }
+
+        .card-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .card-body {
+            padding: 24px;
+        }
+
+        /* Section 1: Access Status */
+        .status-banner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background-color: #F0FDF4;
+            border: 1px solid #BBF7D0;
+            padding: 16px;
+            border-radius: 8px;
+        }
+        
+        .status-icon {
+            width: 12px;
+            height: 12px;
+            background-color: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 0 4px #DCFCE7;
+        }
+        
+        .status-text {
+            flex: 1;
+        }
+        
+        .status-title {
+            font-weight: 600;
+            color: #166534;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+        
+        .status-ip {
+            font-size: 13px;
+            color: #15803D;
+        }
+        
+        .access-log {
+            margin-top: 16px;
+            background-color: #1E293B;
+            color: #E2E8F0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        /* Section 2: Permissions */
+        .permission-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        
+        .permission-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .permission-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            width: fit-content;
+        }
+        
+        .badge-enabled {
+            background-color: #DCFCE7;
+            color: #166534;
+        }
+        
+        .badge-disabled {
+            background-color: #F1F5F9;
+            color: #64748B;
+        }
+
+        /* Section 3: SSH Key */
+        .ssh-status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .ssh-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .ssh-meta {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            color: var(--text-main);
+            box-sizing: border-box;
+            resize: vertical;
+            min-height: 120px;
+            background-color: #F8FAFC;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            background-color: #FFFFFF;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Navigation -->
+    <div class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-icon">🔒</div>
+            WFH Access Portal
+        </div>
+        <div class="nav-user">
+            <div class="user-info">Logged in as <strong>{{ username }}</strong></div>
+            <a href="{{ url_for('employee_logout') }}" class="btn-logout">Logout</a>
+        </div>
     </div>
 
-    {% if access_result %}
-    <div class="card mb-4">
-      <div class="card-body">
-        <h5 class="card-title">WFH Access</h5>
-        <p class="text-muted mb-3">Network access has been opened for your current IP.</p>
-        <pre class="bg-light p-3 border mb-0">{{ access_result }}</pre>
-      </div>
-    </div>
-    {% endif %}
+    <div class="container">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+            {% for category, message in messages %}
+              <div class="alert {% if category == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ message }}</div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
 
-    <div class="card mb-4">
-      <div class="card-body">
-        <h5 class="card-title">SSH Key Status</h5>
-        {% if ssh_public_key %}
-          <p class="mb-1"><span class="badge bg-success">Uploaded</span></p>
-          <p class="text-muted small mb-0">Last updated: {{ ssh_key_updated_at or "—" }}</p>
-        {% else %}
-          <p class="mb-0"><span class="badge bg-warning text-dark">Not uploaded yet</span></p>
+        <!-- Section 1: Access Status -->
+        {% if access_result %}
+        <div class="card">
+            <div class="card-header">
+                <h3>Access Status</h3>
+            </div>
+            <div class="card-body">
+                <div class="status-banner">
+                    <div class="status-icon"></div>
+                    <div class="status-text">
+                        <div class="status-title">Network Access Active</div>
+                        <div class="status-ip">Access has been granted to your current IP address.</div>
+                    </div>
+                </div>
+                <!-- Optional: Show technical output from AWS -->
+                <div class="access-log">{{ access_result }}</div>
+            </div>
+        </div>
         {% endif %}
-      </div>
+
+        <!-- Section 2: Access Permissions -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Access Permissions</h3>
+            </div>
+            <div class="card-body">
+                <div class="permission-grid">
+                    {% if user_info.get('allowLogAccess') %}
+                    <div class="permission-item">
+                        <span class="permission-label">Log Access</span>
+                        <span class="badge badge-enabled">Enabled</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if user_info.get('allowServerMetricsAccess') %}
+                    <div class="permission-item">
+                        <span class="permission-label">Metrics Access</span>
+                        <span class="badge badge-enabled">Enabled</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if user_info.get('allowHpAgentAccess') %}
+                    <div class="permission-item">
+                        <span class="permission-label">HP Agent Access</span>
+                        <span class="badge badge-enabled">Enabled</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if user_info.get('portsToOpen') %}
+                    <div class="permission-item">
+                        <span class="permission-label">Global Ports</span>
+                        <span class="badge badge-enabled">{{ user_info.get('portsToOpen') | join(', ') }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if not user_info.get('allowLogAccess') and not user_info.get('allowServerMetricsAccess') and not user_info.get('allowHpAgentAccess') and not user_info.get('portsToOpen') %}
+                    <div class="permission-item">
+                        <span class="permission-label" style="color:var(--text-muted); font-weight:normal; text-transform:none;">No specific access permissions granted.</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: SSH Public Key -->
+        <div class="card">
+            <div class="card-header">
+                <h3>SSH Public Key</h3>
+            </div>
+            <div class="card-body">
+                <div class="ssh-status-row">
+                    <div class="ssh-status">
+                        {% if ssh_public_key %}
+                            <span class="badge badge-enabled">Uploaded</span>
+                            <span class="ssh-meta">Last updated: {{ ssh_key_updated_at }}</span>
+                        {% else %}
+                            <span class="badge" style="background-color:#FEF9C3; color:#A16207;">Not Uploaded</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <form method="POST">
+                    <div class="form-group">
+                        <textarea name="ssh_public_key" class="form-control" placeholder="Paste your public key here (e.g. ssh-ed25519 AAAA...)">{{ ssh_public_key or "" }}</textarea>
+                    </div>
+                    <button type="submit" class="btn-primary">Save SSH Key</button>
+                </form>
+            </div>
+        </div>
+
     </div>
 
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title">Upload SSH Public Key</h5>
-        <p class="text-muted">
-          Paste your public key (<code>~/.ssh/id_ed25519.pub</code> or
-          <code>~/.ssh/id_rsa.pub</code>).
-        </p>
-        <form method="POST">
-          <div class="mb-3">
-            <label class="form-label">SSH public key</label>
-            <textarea name="ssh_public_key" class="form-control font-monospace" rows="4"
-                      placeholder="ssh-ed25519 AAAA... user@laptop">{{ ssh_public_key or "" }}</textarea>
-          </div>
-          <button type="submit" class="btn btn-primary">Save SSH Key</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-{% endblock %}
+</body>
+</html>

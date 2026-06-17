@@ -77,12 +77,17 @@ def _grant_employee_access(username):
 
 
 def _employee_dashboard_context(username, access_result=None):
+    from config_writer import get_access_cfg
+    cfg = get_access_cfg()
+    user_info = cfg["ALLOWED_USR_IDENTITIES"].get(username, {})
+    
     ssh_info = get_ssh_public_key(username)
     return {
         "username": username,
         "ssh_public_key": ssh_info["ssh_public_key"] if ssh_info else None,
         "ssh_key_updated_at": ssh_info["ssh_key_updated_at"] if ssh_info else None,
         "access_result": access_result,
+        "user_info": user_info,
     }
 
 
@@ -175,6 +180,14 @@ def view_users():
     return render_template("users.html", users=users, ssh_key_status=ssh_key_status)
 
 
+@app.route("/admin/users-mockup2")
+@login_required
+def view_users_mockup2():
+    users = list_users()
+    ssh_key_status = get_all_ssh_key_status()
+    return render_template("users_mockup2.html", users=users, ssh_key_status=ssh_key_status)
+
+
 # ---------------------------------------------------------------------------
 # Add User
 # ---------------------------------------------------------------------------
@@ -244,6 +257,36 @@ def add_user():
         if ports_to_open:
             user_entry["portsToOpen"] = ports_to_open
 
+        # Parse region overrides
+        override_regions = request.form.getlist("override_region[]")
+        override_sgs_list = request.form.getlist("override_sgs[]")
+        override_ports_list = request.form.getlist("override_ports[]")
+
+        region_overrides = {}
+        for i, region in enumerate(override_regions):
+            region = region.strip()
+            if not region:
+                continue
+
+            sgs_raw = override_sgs_list[i] if i < len(override_sgs_list) else ""
+            ports_raw_over = override_ports_list[i] if i < len(override_ports_list) else ""
+
+            sgs = [sg.strip() for sg in sgs_raw.split(",") if sg.strip()]
+            try:
+                ports = [int(p.strip()) for p in ports_raw_over.split(",") if p.strip()]
+            except ValueError:
+                flash(f"Ports for region '{region}' must be numbers.", "error")
+                return render_template("add_user.html", role_templates=role_templates,
+                                       role_templates_json=role_templates_json)
+
+            region_overrides[region] = {
+                "securityGrpIds": sgs,
+                "portsToOpen": ports
+            }
+
+        if region_overrides:
+            user_entry["overRiddenRegionAndCfg"] = region_overrides
+
         add_user_to_config(username, user_entry)
 
         add_audit_entry(
@@ -307,20 +350,44 @@ def edit_user(username):
                 flash("Ports must be numbers e.g. 22,3306", "error")
                 return render_template("edit_user.html", username=username, user=user)
 
-        conn = get_db()
-        conn.execute("""
-            UPDATE wfh_users SET
-                allow_log_access = ?,
-                allow_metrics_access = ?,
-                allow_hp_agent_access = ?,
-                ports_to_open = ?
-            WHERE username = ?
-        """, (
-            int(allow_log), int(allow_metrics), int(allow_hp_agent),
-            json.dumps(ports_to_open), username
-        ))
-        conn.commit()
-        conn.close()
+        # Parse region overrides
+        override_regions = request.form.getlist("override_region[]")
+        override_sgs_list = request.form.getlist("override_sgs[]")
+        override_ports_list = request.form.getlist("override_ports[]")
+
+        region_overrides = {}
+        for i, region in enumerate(override_regions):
+            region = region.strip()
+            if not region:
+                continue
+
+            sgs_raw = override_sgs_list[i] if i < len(override_sgs_list) else ""
+            ports_raw_over = override_ports_list[i] if i < len(override_ports_list) else ""
+
+            sgs = [sg.strip() for sg in sgs_raw.split(",") if sg.strip()]
+            try:
+                ports = [int(p.strip()) for p in ports_raw_over.split(",") if p.strip()]
+            except ValueError:
+                flash(f"Ports for region '{region}' must be numbers.", "error")
+                return render_template("edit_user.html", username=username, user=user)
+
+            region_overrides[region] = {
+                "securityGrpIds": sgs,
+                "portsToOpen": ports
+            }
+
+        # Update via config writer (which updates db)
+        user_entry = {
+            "allowLogAccess": allow_log,
+            "allowServerMetricsAccess": allow_metrics,
+            "allowHpAgentAccess": allow_hp_agent,
+            "portsToOpen": ports_to_open
+        }
+        if region_overrides:
+            user_entry["overRiddenRegionAndCfg"] = region_overrides
+        
+        from config_writer import update_user_in_config
+        update_user_in_config(username, user_entry)
 
         add_audit_entry(
             admin_username=session["admin_username"],

@@ -1,0 +1,224 @@
+{% extends "admin_layout.html" %}
+{% block title %}View Users - Mockup{% endblock %}
+{% block content %}
+
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .btn-black {
+        background-color: #111827;
+        color: #FFFFFF;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        display: inline-block;
+    }
+    
+    .btn-black:hover {
+        background-color: #000000;
+        color: #FFFFFF;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+    }
+    
+    .table-card {
+        background: white; 
+        border: 1px solid var(--border); 
+        border-radius: 12px;
+        box-shadow: var(--shadow); 
+        overflow: hidden;
+    }
+    
+    .custom-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        text-align: left; 
+    }
+    
+    .custom-table th { 
+        background: #F8FAFC; 
+        color: #64748B; 
+        font-size: 12px; 
+        font-weight: 600; 
+        text-transform: uppercase; 
+        padding: 16px 24px; 
+        border-bottom: 1px solid var(--border); 
+        white-space: nowrap;
+    }
+    
+    .custom-table td { 
+        padding: 20px 24px; 
+        border-bottom: 1px solid var(--border); 
+        vertical-align: top; 
+    }
+    
+    .custom-table tr:last-child td { border-bottom: none; }
+    .custom-table tr:hover { background-color: #F8FAFC; }
+    
+    /* User Profile Row */
+    .user-profile { display: flex; align-items: center; gap: 16px; }
+    .user-avatar { 
+        width: 40px; height: 40px; 
+        background: #EFF6FF; color: var(--primary); 
+        border-radius: 50%; 
+        display: flex; align-items: center; justify-content: center; 
+        font-weight: 600; font-size: 15px; 
+        flex-shrink: 0;
+    }
+    .user-name { font-weight: 600; font-size: 15px; color: var(--text-main); }
+    .otp-seed { font-family: monospace; font-size: 12px; color: #64748B; margin-top: 4px; background: #F1F5F9; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+
+    /* Access Tags */
+    .access-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .tag-green { background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0; }
+    .tag-blue { background: #DBEAFE; color: #1E40AF; border: 1px solid #BFDBFE; }
+    .tag-gray { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+
+    /* Region Blocks */
+    .region-block { 
+        background: white; 
+        border: 1px solid var(--border); 
+        padding: 10px 14px; 
+        border-radius: 8px; 
+        margin-bottom: 8px; 
+        font-size: 13px; 
+        color: #334155; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .region-block strong { color: var(--text-main); }
+    .region-block .sg-list { font-family: monospace; color: var(--primary); font-size: 12px; word-break: break-all; margin-top: 4px; display: block; }
+    .region-block .port-list { font-size: 11px; color: #64748B; margin-top: 4px; display: block; }
+
+    /* Action Buttons */
+    .action-btns { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .btn-outline { 
+        padding: 6px 16px; 
+        border: 1px solid var(--border); 
+        border-radius: 6px; 
+        background: white; 
+        color: var(--text-main); 
+        font-size: 13px; 
+        font-weight: 500; 
+        cursor: pointer; 
+        text-decoration: none; 
+        transition: all 0.2s;
+        text-align: center;
+        width: 80px;
+    }
+    .btn-outline:hover { background: #F1F5F9; }
+    .btn-danger-outline { color: #DC2626; border-color: #FECACA; }
+    .btn-danger-outline:hover { background: #FEF2F2; color: #B91C1C; }
+
+</style>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" style="font-size: 24px; margin-bottom: 4px;">User Management</h1>
+        <p class="welcome-msg" style="margin: 0; color: #64748B;">View, edit, and manage access for all {{ users|length }} WFH users.</p>
+    </div>
+    <a href="{{ url_for('add_user') }}" class="btn-black">+ Add New User</a>
+</div>
+
+<div class="table-card">
+    <div style="overflow-x: auto;">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>User Details</th>
+                    <th>Global Permissions</th>
+                    <th>Region & Network Overrides</th>
+                    <th>SSH Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for username, u in users.items() %}
+                <tr>
+                    <!-- Profile & OTP -->
+                    <td>
+                        <div class="user-profile">
+                            <div class="user-avatar">{{ username[0]|upper }}</div>
+                            <div>
+                                <div class="user-name">{{ username }}</div>
+                                <div class="otp-seed" title="OTP Seed">🔑 {{ u.get("otpSeed", "Unknown") }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <!-- Permissions -->
+                    <td>
+                        <div class="access-tags">
+                            {% if u.get('allowLogAccess') %}
+                                <span class="tag tag-green">Log Access</span>
+                            {% endif %}
+                            {% if u.get('allowServerMetricsAccess') %}
+                                <span class="tag tag-green">Metrics Access</span>
+                            {% endif %}
+                            {% if u.get('allowHpAgentAccess') %}
+                                <span class="tag tag-green">HP Agent</span>
+                            {% endif %}
+                            
+                            {% if not u.get('allowLogAccess') and not u.get('allowServerMetricsAccess') and not u.get('allowHpAgentAccess') %}
+                                <span style="font-size: 13px; color: #64748B;">None</span>
+                            {% endif %}
+                        </div>
+                        {% if u.get("portsToOpen") %}
+                            <div style="margin-top: 12px; font-size: 13px; color: #64748B;">
+                                <strong>Global Ports:</strong> {{ u.get("portsToOpen") | join(", ") }}
+                            </div>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Region Overrides -->
+                    <td>
+                        {% set overrides = u.get("overRiddenRegionAndCfg") %}
+                        {% if overrides %}
+                            {% for region, cfg in overrides.items() %}
+                                <div class="region-block">
+                                    <strong>{{ region }}</strong>
+                                    <span class="sg-list">{{ cfg.securityGrpIds | join(', ') }}</span>
+                                    <span class="port-list">Ports: {{ cfg.portsToOpen | join(', ') }}</span>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <span class="tag tag-gray">Global Default Regions Only</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- SSH Status -->
+                    <td>
+                        {% if ssh_key_status.get(username, False) %}
+                            <span class="tag tag-blue">Uploaded</span>
+                        {% else %}
+                            <span class="tag tag-gray" style="background: white;">Not Uploaded</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Actions -->
+                    <td>
+                        <div class="action-btns">
+                            <a href="#" class="btn-outline">Edit</a>
+                            <form style="margin:0; padding:0;">
+                                <button type="button" class="btn-outline btn-danger-outline">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

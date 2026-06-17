@@ -281,9 +281,9 @@ def add_wfh_user(username, password_hash, otp_seed, allow_log_access, allow_metr
 
     conn.commit()
     conn.close()
-def update_wfh_user(username, allow_log_access, allow_metrics_access, allow_hp_agent_access, ports_to_open):
+def update_wfh_user(username, allow_log_access, allow_metrics_access, allow_hp_agent_access, ports_to_open, region_overrides=None):
     """
-    Update an existing WFH user's permissions.
+    Update an existing WFH user's permissions and region overrides.
     """
     conn = get_db()
     conn.execute("""
@@ -294,6 +294,17 @@ def update_wfh_user(username, allow_log_access, allow_metrics_access, allow_hp_a
         int(allow_log_access), int(allow_metrics_access), int(allow_hp_agent_access),
         json.dumps(ports_to_open), username
     ))
+
+    if region_overrides is not None:
+        # Clear existing overrides
+        conn.execute("DELETE FROM wfh_user_region_overrides WHERE username = ?", (username,))
+        # Insert new ones
+        for region, cfg in region_overrides.items():
+            conn.execute("""
+                INSERT INTO wfh_user_region_overrides (username, region, security_group_ids, ports_to_open)
+                VALUES (?, ?, ?, ?)
+            """, (username, region, json.dumps(cfg["securityGrpIds"]), json.dumps(cfg["portsToOpen"])))
+
     conn.commit()
     conn.close()
 

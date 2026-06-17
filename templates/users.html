@@ -1,60 +1,349 @@
-{% extends "base.html" %}
-{% block title %}WFH Users{% endblock %}
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WFH Access - View Users</title>
+    <!-- Use Inter font for modern typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <style>
+        /* --- Table Specific Styles --- */
+        .table-container {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            margin-top: 24px;
+        }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3>WFH Users ({{ users|length }})</h3>
-  <div>
-    <a href="{{ url_for('add_user') }}" class="btn btn-primary me-2">+ Add New User</a>
-    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
-  </div>
+        .table-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table-header-row h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .btn-add {
+            background-color: var(--primary);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .btn-add:hover {
+            background-color: #1D4ED8;
+        }
+
+        .custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .custom-table th {
+            background-color: #F8FAFC;
+            color: #4B5563;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .custom-table td {
+            padding: 16px 24px;
+            font-size: 14px;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        .custom-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .custom-table tr:hover {
+            background-color: #F8FAFC;
+        }
+
+        /* --- Badges --- */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1;
+        }
+
+        .badge-yes {
+            background-color: #DCFCE7;
+            color: #166534;
+        }
+
+        .badge-no {
+            background-color: #F3F4F6;
+            color: #4B5563;
+        }
+
+        .badge-region {
+            background-color: #DBEAFE;
+            color: #1E40AF;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+
+        .badge-global {
+            background-color: #FEF3C7;
+            color: #92400E;
+        }
+
+        .badge-ssh-yes {
+            background-color: #DCFCE7;
+            color: #166534;
+            border: 1px solid #BBF7D0;
+        }
+
+        .badge-ssh-no {
+            background-color: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
+        }
+
+        /* --- Action Buttons --- */
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: transparent;
+            transition: all 0.2s;
+        }
+
+        .btn-edit {
+            color: var(--primary);
+            border-color: #BFDBFE;
+            background-color: #EFF6FF;
+        }
+
+        .btn-edit:hover {
+            background-color: #DBEAFE;
+        }
+
+        .btn-ssh {
+            color: #0D9488;
+            border-color: #99F6E4;
+            background-color: #F0FDFA;
+        }
+
+        .btn-ssh:hover {
+            background-color: #CCFBF1;
+        }
+
+        .btn-delete {
+            color: #DC2626;
+            border-color: #FECACA;
+            background-color: #FEF2F2;
+        }
+
+        .btn-delete:hover {
+            background-color: #FEE2E2;
+        }
+        
+        .region-list {
+            display: flex;
+            flex-wrap: wrap;
+            max-width: 200px;
+        }
+        
+        .sg-tooltip {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+    <div class="sidebar-header">
+        Admin Access
+    </div>
+    <div class="sidebar-menu">
+        <a href="{{ url_for('dashboard') }}" class="menu-item">Dashboard</a>
+        <a href="{{ url_for('add_user') }}" class="menu-item">Add New User</a>
+        <a href="{{ url_for('view_users') }}" class="menu-item active">View Users</a>
+        <a href="{{ url_for('view_audit_log') }}" class="menu-item">Audit Log</a>
+        
+        <div class="menu-divider"></div>
+        
+        <!-- Future connection placeholders -->
+        <a href="#" class="menu-item">AWS Region Management</a>
+        <a href="#" class="menu-item">Button 2</a>
+    </div>
 </div>
 
-<table class="table table-striped table-hover">
-  <thead class="table-dark">
-    <tr>
-      <th>Username</th>
-      <th>Log Access</th>
-      <th>Metrics Access</th>
-      <th>HP Agent Access</th>
-      <th>Ports</th>
-      <th>OTP Seed</th>
-      <th>SSH Key</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for username, u in users.items() %}
-    <tr>
-      <td><strong>{{ username }}</strong></td>
-      <td>{{ "Yes" if u.get("allowLogAccess") else "No" }}</td>
-      <td>{{ "Yes" if u.get("allowServerMetricsAccess") else "No" }}</td>
-      <td>{{ "Yes" if u.get("allowHpAgentAccess") else "No" }}</td>
-      <td>{{ u.get("portsToOpen", []) | join(", ") or "—" }}</td>
-      <td><code style="font-size:0.72em;">{{ u.get("otpSeed", "") }}</code></td>
-      <td>
-        {% set ssh = ssh_key_status.get(username, {}) %}
-        {% if ssh.get("has_key") %}
-          <span class="badge bg-success">Uploaded</span>
-        {% else %}
-          <span class="badge bg-secondary">None</span>
-        {% endif %}
-      </td>
-      <td>
-        <a href="{{ url_for('view_user_ssh_key', username=username) }}"
-           class="btn btn-sm btn-outline-info me-1">SSH Key</a>
-        <a href="{{ url_for('edit_user', username=username) }}"
-           class="btn btn-sm btn-outline-primary me-1">Edit</a>
+<!-- Main Area -->
+<div class="main-wrapper">
+    <!-- Header -->
+    <div class="top-header">
+        <div class="profile-info">
+            <div class="avatar">
+                {{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}
+            </div>
+            <div class="username">{{ session['admin_username'] or 'admin' }}</div>
+            <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+        </div>
+    </div>
 
-        <form method="POST" action="{{ url_for('delete_user', username=username) }}"
-              style="display:inline;"
-              onsubmit="return confirm('Delete user {{ username }}? This cannot be undone.')">
-          <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+    <!-- Content -->
+    <div class="content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div>
+            {% for category, message in messages %}
+              <div class="alert {% if category == 'error' %}alert-error{% endif %}">{{ message }}</div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
 
-{% endblock %}
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+                <h1 class="page-title">User Management</h1>
+                <p class="welcome-msg" style="margin-bottom:0;">View, edit, and manage access for all {{ users|length }} WFH users.</p>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="table-header-row">
+                <h2>All Users</h2>
+                <a href="{{ url_for('add_user') }}" class="btn-add">+ Add New User</a>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="custom-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Access Levels</th>
+                            <th>Global Ports</th>
+                            <th>Region Access</th>
+                            <th>OTP Seed</th>
+                            <th>SSH Key</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for username, u in users.items() %}
+                        <tr>
+                            <td>
+                                <strong>{{ username }}</strong>
+                            </td>
+                            <td>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    {% if u.get('allowLogAccess') %}
+                                        <div><span class="badge badge-yes">Log Access</span></div>
+                                    {% endif %}
+                                    {% if u.get('allowServerMetricsAccess') %}
+                                        <div><span class="badge badge-yes">Metrics Access</span></div>
+                                    {% endif %}
+                                    {% if u.get('allowHpAgentAccess') %}
+                                        <div><span class="badge badge-yes">HP Agent Access</span></div>
+                                    {% endif %}
+                                    {% if not u.get('allowLogAccess') and not u.get('allowServerMetricsAccess') and not u.get('allowHpAgentAccess') %}
+                                        <span style="font-size: 13px; color: var(--text-muted);">None</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <strong>{{ u.get("portsToOpen", []) | join(", ") or "—" }}</strong>
+                            </td>
+                            <td>
+                                {% set overrides = u.get("overRiddenRegionAndCfg") %}
+                                {% if overrides %}
+                                    <div class="region-list">
+                                        {% for region, cfg in overrides.items() %}
+                                            <div style="margin-bottom: 8px;">
+                                                <span class="badge badge-region">{{ region }}</span>
+                                                <span class="sg-tooltip">Ports: {{ cfg.portsToOpen | join(',') }}</span>
+                                                <span class="sg-tooltip" style="word-break: break-all;">{{ cfg.securityGrpIds | join(', ') }}</span>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="badge badge-global">Global Defaults</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <code style="background:#F3F4F6; padding:4px 6px; border-radius:4px; font-size:12px; color:#4B5563;">{{ u.get("otpSeed", "") }}</code>
+                            </td>
+                            <td>
+                                {% set ssh = ssh_key_status.get(username, {}) %}
+                                {% if ssh.get("has_key") %}
+                                  <span class="badge badge-ssh-yes">Uploaded</span>
+                                {% else %}
+                                  <span class="badge badge-ssh-no">None</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="actions-cell">
+                                    <a href="{{ url_for('view_user_ssh_key', username=username) }}" class="btn-action btn-ssh" title="View SSH Key">
+                                        Key
+                                    </a>
+                                    <a href="{{ url_for('edit_user', username=username) }}" class="btn-action btn-edit">
+                                        Edit
+                                    </a>
+                                    <form method="POST" action="{{ url_for('delete_user', username=username) }}" style="display:inline;" onsubmit="return confirm('Delete user {{ username }}? This cannot be undone.')">
+                                        <button type="submit" class="btn-action btn-delete">Del</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        
+                        {% if not users %}
+                        <tr>
+                            <td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted);">
+                                No users found. Click "Add New User" to create one.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

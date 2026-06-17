@@ -75,12 +75,15 @@ def update_user_in_config(username, user_entry):
     """
     Update an existing user in the database.
     """
+    region_overrides = user_entry.get("overRiddenRegionAndCfg")
+
     update_wfh_user(
         username=username,
         allow_log_access=user_entry.get("allowLogAccess", False),
         allow_metrics_access=user_entry.get("allowServerMetricsAccess", False),
         allow_hp_agent_access=user_entry.get("allowHpAgentAccess", False),
         ports_to_open=user_entry.get("portsToOpen", []),
+        region_overrides=region_overrides,
     )
 
 

@@ -14,7 +14,7 @@
 {% if ssh_public_key %}
   <div class="card">
     <div class="card-body">
-      <p class="text-muted">Copy this public key when granting SSH access (e.g. Claude server).</p>
+      <p class="text-muted">Copy this public key when granting SSH access.</p>
       <textarea id="ssh-key-text" class="form-control font-monospace mb-3" rows="4" readonly>{{ ssh_public_key }}</textarea>
       <button type="button" class="btn btn-primary" onclick="copySshKey()">Copy to clipboard</button>
       <span id="copy-status" class="text-success ms-2" style="display:none;">Copied!</span>

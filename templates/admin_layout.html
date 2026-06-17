@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}WFH Access - Admin{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/[email protected]/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            z-index: 1000;
+        }
+
+        .content {
+            flex: 1;
+            padding: 48px;
+            overflow-y: auto;
+            background-color: var(--bg-color);
+        }
+
+        .btn-primary {
+            background: linear-gradient(180deg, var(--primary) 0%, #1d4ed8 100%);
+            border: none;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(180deg, #2057d3 0%, #1b45bc 100%);
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .card-custom {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+
+        .badge-custom {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1;
+            text-decoration: none;
+        }
+
+        .badge-yes {
+            background-color: #DCFCE7;
+            color: #166534;
+        }
+
+        .badge-no {
+            background-color: #F3F4F6;
+            color: #4B5563;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            Admin Access
+        </div>
+        <div class="sidebar-menu">
+            <a href="{{ url_for('dashboard') }}"
+                class="menu-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="{{ url_for('add_user') }}"
+                class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
+            <a href="{{ url_for('view_users') }}"
+                class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View
+                Users</a>
+            <a href="{{ url_for('view_audit_log') }}"
+                class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
+
+            <div class="menu-divider"></div>
+
+            <a href="#" class="menu-item">AWS Region Management</a>
+            <a href="#" class="menu-item">Button 2</a>
+        </div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main-wrapper w-100">
+        <!-- Header -->
+        <div class="top-header">
+            <div class="profile-info">
+                <div class="avatar">
+                    {{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}
+                </div>
+                <div class="username">{{ session['admin_username'] or 'admin' }}</div>
+                <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div>
+                {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+</body>
+
+</html>
