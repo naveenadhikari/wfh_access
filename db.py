@@ -105,6 +105,18 @@ def init_db():
         )
     """)
 
+    # --- Multiple SSH keys per user ---
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_ssh_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            key_name TEXT NOT NULL,
+            ssh_public_key TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (username) REFERENCES wfh_users(username)
+        )
+    """)
+
     conn.commit()
     conn.close()
     migrate_db()
@@ -114,11 +126,50 @@ def init_db():
 def migrate_db():
     """Apply lightweight schema migrations for existing databases."""
     conn = get_db()
+    
+    # Old columns migration (kept for legacy/safety)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(wfh_users)").fetchall()}
     if "ssh_public_key" not in cols:
         conn.execute("ALTER TABLE wfh_users ADD COLUMN ssh_public_key TEXT")
     if "ssh_key_updated_at" not in cols:
         conn.execute("ALTER TABLE wfh_users ADD COLUMN ssh_key_updated_at TEXT")
+    
+    # New table migration
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_ssh_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            key_name TEXT NOT NULL,
+            ssh_public_key TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (username) REFERENCES wfh_users(username)
+        )
+    """)
+    
+    # Migrate old keys to new table
+    users_with_keys = conn.execute(
+        "SELECT username, ssh_public_key, ssh_key_updated_at FROM wfh_users WHERE ssh_public_key IS NOT NULL AND ssh_public_key != ''"
+    ).fetchall()
+    
+    for row in users_with_keys:
+        username = row["username"]
+        pub_key = row["ssh_public_key"]
+        created_at = row["ssh_key_updated_at"]
+        
+        # Check if it already exists in the new table
+        existing = conn.execute(
+            "SELECT 1 FROM user_ssh_keys WHERE username = ? AND ssh_public_key = ?",
+            (username, pub_key)
+        ).fetchone()
+        
+        if not existing:
+            conn.execute(
+                "INSERT INTO user_ssh_keys (username, key_name, ssh_public_key, created_at) VALUES (?, ?, ?, ?)",
+                (username, "Legacy Key", pub_key, created_at or "CURRENT_TIMESTAMP")
+            )
+            
+        # We don't drop the old column since SQLite alter table drop column is complex
+    
     conn.commit()
     conn.close()
 
@@ -318,49 +369,62 @@ def delete_wfh_user(username):
     conn.close()
 
 
-def get_ssh_public_key(username):
+def get_user_ssh_keys(username):
+    """Return a list of SSH keys for the given user."""
     conn = get_db()
-    row = conn.execute(
-        "SELECT ssh_public_key, ssh_key_updated_at FROM wfh_users WHERE username = ?",
+    rows = conn.execute(
+        "SELECT id, key_name, ssh_public_key, created_at FROM user_ssh_keys WHERE username = ? ORDER BY created_at DESC",
         (username,),
-    ).fetchone()
+    ).fetchall()
     conn.close()
-    if row is None:
-        return None
-    return {
-        "ssh_public_key": row["ssh_public_key"],
-        "ssh_key_updated_at": row["ssh_key_updated_at"],
-    }
+    return [dict(row) for row in rows]
 
 
-def set_ssh_public_key(username, ssh_public_key):
+def add_user_ssh_key(username, key_name, ssh_public_key):
+    """Add a new SSH public key for a user."""
     conn = get_db()
     conn.execute(
         """
-        UPDATE wfh_users
-        SET ssh_public_key = ?, ssh_key_updated_at = CURRENT_TIMESTAMP
-        WHERE username = ?
+        INSERT INTO user_ssh_keys (username, key_name, ssh_public_key)
+        VALUES (?, ?, ?)
         """,
-        (ssh_public_key, username),
+        (username, key_name, ssh_public_key),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_user_ssh_key(username, key_id):
+    """Delete a specific SSH public key for a user."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM user_ssh_keys WHERE username = ? AND id = ?",
+        (username, key_id),
     )
     conn.commit()
     conn.close()
 
 
 def get_all_ssh_key_status():
-    """Return {username: {has_key, ssh_key_updated_at}} for every WFH user."""
+    """Return {username: {has_key, key_count}} for every WFH user."""
     conn = get_db()
-    rows = conn.execute(
-        "SELECT username, ssh_public_key, ssh_key_updated_at FROM wfh_users"
-    ).fetchall()
-    conn.close()
-    return {
-        row["username"]: {
-            "has_key": bool(row["ssh_public_key"]),
-            "ssh_key_updated_at": row["ssh_key_updated_at"],
+    users = conn.execute("SELECT username FROM wfh_users").fetchall()
+    
+    status = {}
+    for user in users:
+        username = user["username"]
+        count_row = conn.execute(
+            "SELECT COUNT(*) as count FROM user_ssh_keys WHERE username = ?",
+            (username,)
+        ).fetchone()
+        count = count_row["count"]
+        status[username] = {
+            "has_key": count > 0,
+            "key_count": count
         }
-        for row in rows
-    }
+        
+    conn.close()
+    return status
 
 
 if __name__ == "__main__":

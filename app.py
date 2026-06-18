@@ -25,12 +25,15 @@ import secrets
 import string
 from functools import wraps
 
+import datetime
 import qrcode
 import pyotp
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives import serialization
 
 from auth import verify_admin, verify_wfh_user, hash_password, check_password, verify_otp_with_seed, generate_otp_seed
-from db import get_db, add_audit_entry, get_recent_audit_entries, get_ssh_public_key, set_ssh_public_key, get_all_ssh_key_status, migrate_db
+from db import get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key, delete_user_ssh_key, get_all_ssh_key_status, migrate_db
 from config_writer import add_user_to_config, user_exists, list_users, get_access_cfg
 from manage_wfh_access import grant_authorized_access
 from ssh_keys import normalize_ssh_public_key
@@ -40,9 +43,8 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 migrate_db()
 
 
-# ---------------------------------------------------------------------------
+
 # Helpers
-# ---------------------------------------------------------------------------
 def login_required(view_func):
     @wraps(view_func)
     def wrapped(*args, **kwargs):
@@ -81,13 +83,37 @@ def _employee_dashboard_context(username, access_result=None):
     cfg = get_access_cfg()
     user_info = cfg["ALLOWED_USR_IDENTITIES"].get(username, {})
     
-    ssh_info = get_ssh_public_key(username)
+    ssh_keys = get_user_ssh_keys(username)
     return {
         "username": username,
-        "ssh_public_key": ssh_info["ssh_public_key"] if ssh_info else None,
-        "ssh_key_updated_at": ssh_info["ssh_key_updated_at"] if ssh_info else None,
+        "ssh_keys": ssh_keys,
         "access_result": access_result,
         "user_info": user_info,
+    }
+
+
+def _get_global_regions():
+    """Region → security group map for admin user forms."""
+    regions = get_access_cfg().get("regionAndCfg") or {}
+    if not regions:
+        from access_wfh_cfg import ACCESS_MANAGER_CONF
+        regions = ACCESS_MANAGER_CONF.get("regionAndCfg", {})
+    return regions
+
+
+def _add_user_form_context(role_templates, role_templates_json):
+    return {
+        "role_templates": role_templates,
+        "role_templates_json": role_templates_json,
+        "global_regions": _get_global_regions(),
+    }
+
+
+def _edit_user_form_context(username, user):
+    return {
+        "username": username,
+        "user": user,
+        "global_regions": _get_global_regions(),
     }
 
 
@@ -104,9 +130,7 @@ def generate_qr_code_b64(seed, username, issuer="WFH-Access"):
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-# ---------------------------------------------------------------------------
 # Unified login
-# ---------------------------------------------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
@@ -160,18 +184,15 @@ def admin_logout():
     return logout()
 
 
-# ---------------------------------------------------------------------------
 # Dashboard
-# ---------------------------------------------------------------------------
 @app.route("/admin/dashboard")
 @login_required
 def dashboard():
     return render_template("dashboard.html")
 
 
-# ---------------------------------------------------------------------------
+
 # View Users page
-# ---------------------------------------------------------------------------
 @app.route("/admin/users")
 @login_required
 def view_users():
@@ -180,17 +201,9 @@ def view_users():
     return render_template("users.html", users=users, ssh_key_status=ssh_key_status)
 
 
-@app.route("/admin/users-mockup2")
-@login_required
-def view_users_mockup2():
-    users = list_users()
-    ssh_key_status = get_all_ssh_key_status()
-    return render_template("users_mockup2.html", users=users, ssh_key_status=ssh_key_status)
 
-
-# ---------------------------------------------------------------------------
 # Add User
-# ---------------------------------------------------------------------------
+
 @app.route("/admin/add-user", methods=["GET", "POST"])
 @login_required
 def add_user():
@@ -217,13 +230,17 @@ def add_user():
 
         if not username:
             flash("Username is required.", "error")
-            return render_template("add_user.html", role_templates=role_templates,
-                                   role_templates_json=role_templates_json)
+            return render_template(
+                "add_user.html",
+                **_add_user_form_context(role_templates, role_templates_json),
+            )
 
         if user_exists(username):
             flash(f"User '{username}' already exists.", "error")
-            return render_template("add_user.html", role_templates=role_templates,
-                                   role_templates_json=role_templates_json)
+            return render_template(
+                "add_user.html",
+                **_add_user_form_context(role_templates, role_templates_json),
+            )
 
         ports_to_open = []
         if ports_raw:
@@ -231,8 +248,10 @@ def add_user():
                 ports_to_open = [int(p.strip()) for p in ports_raw.split(",") if p.strip()]
             except ValueError:
                 flash("Ports must be numbers e.g. 22,3306", "error")
-                return render_template("add_user.html", role_templates=role_templates,
-                                       role_templates_json=role_templates_json)
+                return render_template(
+                    "add_user.html",
+                    **_add_user_form_context(role_templates, role_templates_json),
+                )
 
         plain_password = generate_password()
         password_hash = hash_password(plain_password)
@@ -276,8 +295,10 @@ def add_user():
                 ports = [int(p.strip()) for p in ports_raw_over.split(",") if p.strip()]
             except ValueError:
                 flash(f"Ports for region '{region}' must be numbers.", "error")
-                return render_template("add_user.html", role_templates=role_templates,
-                                       role_templates_json=role_templates_json)
+                return render_template(
+                    "add_user.html",
+                    **_add_user_form_context(role_templates, role_templates_json),
+                )
 
             region_overrides[region] = {
                 "securityGrpIds": sgs,
@@ -319,13 +340,13 @@ def add_user():
             }
         )
 
-    return render_template("add_user.html", role_templates=role_templates,
-                           role_templates_json=role_templates_json)
+    return render_template(
+        "add_user.html",
+        **_add_user_form_context(role_templates, role_templates_json),
+    )
 
 
-# ---------------------------------------------------------------------------
 # Edit User
-# ---------------------------------------------------------------------------
 @app.route("/admin/edit-user/<username>", methods=["GET", "POST"])
 @login_required
 def edit_user(username):
@@ -348,7 +369,10 @@ def edit_user(username):
                 ports_to_open = [int(p.strip()) for p in ports_raw.split(",") if p.strip()]
             except ValueError:
                 flash("Ports must be numbers e.g. 22,3306", "error")
-                return render_template("edit_user.html", username=username, user=user)
+                return render_template(
+                    "edit_user.html",
+                    **_edit_user_form_context(username, user),
+                )
 
         # Parse region overrides
         override_regions = request.form.getlist("override_region[]")
@@ -369,7 +393,10 @@ def edit_user(username):
                 ports = [int(p.strip()) for p in ports_raw_over.split(",") if p.strip()]
             except ValueError:
                 flash(f"Ports for region '{region}' must be numbers.", "error")
-                return render_template("edit_user.html", username=username, user=user)
+                return render_template(
+                    "edit_user.html",
+                    **_edit_user_form_context(username, user),
+                )
 
             region_overrides[region] = {
                 "securityGrpIds": sgs,
@@ -383,9 +410,8 @@ def edit_user(username):
             "allowHpAgentAccess": allow_hp_agent,
             "portsToOpen": ports_to_open
         }
-        if region_overrides:
-            user_entry["overRiddenRegionAndCfg"] = region_overrides
-        
+        user_entry["overRiddenRegionAndCfg"] = region_overrides
+
         from config_writer import update_user_in_config
         update_user_in_config(username, user_entry)
 
@@ -404,12 +430,10 @@ def edit_user(username):
         flash(f"User '{username}' updated successfully.", "success")
         return redirect(url_for("view_users"))
 
-    return render_template("edit_user.html", username=username, user=user)
+    return render_template("edit_user.html", **_edit_user_form_context(username, user))
 
 
-# ---------------------------------------------------------------------------
 # Delete User
-# ---------------------------------------------------------------------------
 @app.route("/admin/delete-user/<username>", methods=["POST"])
 @login_required
 def delete_user(username):
@@ -434,9 +458,7 @@ def delete_user(username):
     return redirect(url_for("view_users"))
 
 
-# ---------------------------------------------------------------------------
 # Audit Log page
-# ---------------------------------------------------------------------------
 @app.route("/admin/audit-log")
 @login_required
 def view_audit_log():
@@ -451,18 +473,15 @@ def view_user_ssh_key(username):
         flash(f"User '{username}' not found.", "error")
         return redirect(url_for("view_users"))
 
-    ssh_info = get_ssh_public_key(username)
+    ssh_keys = get_user_ssh_keys(username)
     return render_template(
         "admin_ssh_key.html",
         username=username,
-        ssh_public_key=ssh_info["ssh_public_key"] if ssh_info else None,
-        ssh_key_updated_at=ssh_info["ssh_key_updated_at"] if ssh_info else None,
+        ssh_keys=ssh_keys,
     )
 
 
-# ---------------------------------------------------------------------------
 # Employee portal
-# ---------------------------------------------------------------------------
 @app.route("/employee/login")
 def employee_login_redirect():
     return redirect(url_for("login"))
@@ -479,32 +498,94 @@ def employee_dashboard():
     username = session["employee_username"]
 
     if request.method == "POST":
-        raw_key = request.form.get("ssh_public_key", "")
-        normalized_key = normalize_ssh_public_key(raw_key)
+        action = request.form.get("action")
+        if action == "add_key":
+            key_name = request.form.get("key_name", "").strip() or f"Key {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            raw_key = request.form.get("ssh_public_key", "")
+            normalized_key = normalize_ssh_public_key(raw_key)
 
-        if not normalized_key:
-            flash("Invalid SSH public key. Paste a single-line key (ssh-rsa, ssh-ed25519, etc.).", "error")
-            return render_template(
-                "employee_dashboard.html",
-                **_employee_dashboard_context(username),
+            if not normalized_key:
+                flash("Invalid SSH public key. Paste a single-line key (ssh-rsa, ssh-ed25519, etc.).", "error")
+                return render_template(
+                    "employee_dashboard.html",
+                    **_employee_dashboard_context(username),
+                )
+
+            add_user_ssh_key(username, key_name, normalized_key)
+            add_audit_entry(
+                admin_username=username,
+                target_user=username,
+                action="upload_ssh_key",
+                details={"message": f"Employee uploaded SSH public key '{key_name}'."},
             )
-
-        set_ssh_public_key(username, normalized_key)
-        add_audit_entry(
-            admin_username=username,
-            target_user=username,
-            action="upload_ssh_key",
-            details={"message": "Employee uploaded or updated SSH public key."},
-        )
-        flash("SSH public key saved successfully.", "success")
-        return redirect(url_for("employee_dashboard"))
+            flash("SSH public key saved successfully.", "success")
+            return redirect(url_for("employee_dashboard"))
 
     return render_template("employee_dashboard.html", **_employee_dashboard_context(username))
 
 
-# ---------------------------------------------------------------------------
+@app.route("/employee/ssh-key/delete/<int:key_id>", methods=["POST"])
+@employee_login_required
+def delete_ssh_key(key_id):
+    username = session["employee_username"]
+    delete_user_ssh_key(username, key_id)
+    add_audit_entry(
+        admin_username=username,
+        target_user=username,
+        action="delete_ssh_key",
+        details={"message": f"Employee deleted SSH key ID {key_id}."},
+    )
+    flash("SSH public key deleted successfully.", "success")
+    return redirect(url_for("employee_dashboard"))
+
+
+@app.route("/employee/ssh-key/generate", methods=["POST"])
+@employee_login_required
+def generate_ssh_key():
+    username = session["employee_username"]
+    
+    # Generate Ed25519 key pair
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+    
+    # Serialize private key
+    priv_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    
+    # Serialize public key
+    pub_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH
+    )
+    pub_key_str = pub_bytes.decode('utf-8')
+    
+    key_name = f"Generated Key {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    
+    add_user_ssh_key(username, key_name, pub_key_str)
+    add_audit_entry(
+        admin_username=username,
+        target_user=username,
+        action="generate_ssh_key",
+        details={"message": f"Employee generated a new SSH key pair '{key_name}'."},
+    )
+    
+    # Send private key as file download
+    mem = io.BytesIO()
+    mem.write(priv_bytes)
+    mem.seek(0)
+    
+    return send_file(
+        mem,
+        as_attachment=True,
+        download_name="id_ed25519",
+        mimetype="application/x-pem-file"
+    )
+
+
 # Legacy request-access URL (redirects to unified employee portal)
-# ---------------------------------------------------------------------------
 @app.route("/request-access", methods=["GET", "POST"])
 def request_access():
     if request.method == "GET":
@@ -531,9 +612,7 @@ def request_access():
     return redirect(url_for("login"))
 
 
-# ---------------------------------------------------------------------------
 # Legacy curl endpoint (backward compatibility)
-# ---------------------------------------------------------------------------
 @app.route("/allow-access", methods=["POST"])
 def allow_access():
     import logging
@@ -576,9 +655,8 @@ def allow_access():
     return jsonify(response)
 
 
-# ---------------------------------------------------------------------------
 # Landing page
-# ---------------------------------------------------------------------------
+
 # (Removed index function as / is now handled by login)
 
 

@@ -39,14 +39,19 @@
     <div id="regionOverridesContainer">
       {% set overrides = user.get('overRiddenRegionAndCfg', {}) %}
       {% for region, cfg in overrides.items() %}
-      <div class="row mb-3 align-items-end border p-2 rounded bg-light">
+      <div class="row mb-3 align-items-end border p-2 rounded bg-light override-row">
         <div class="col-md-3">
             <label class="form-label small">Region Name</label>
-            <input type="text" name="override_region[]" class="form-control form-control-sm" value="{{ region }}">
+            <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)" required>
+                <option value="">-- Select Region --</option>
+                {% for rName in global_regions.keys() %}
+                <option value="{{ rName }}" {% if rName == region %}selected{% endif %}>{{ rName }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="col-md-4">
             <label class="form-label small">Security Group IDs (comma-separated)</label>
-            <input type="text" name="override_sgs[]" class="form-control form-control-sm" value="{{ cfg.securityGrpIds | join(', ') }}">
+            <input type="text" name="override_sgs[]" class="form-control form-control-sm sg-input" value="{{ cfg.securityGrpIds | join(', ') }}">
         </div>
         <div class="col-md-3">
             <label class="form-label small">Ports to Open</label>
@@ -67,18 +72,29 @@
 </form>
 
 <script>
+const globalRegions = {{ global_regions | tojson | safe }};
+
 function addOverrideRow(region = '', sgs = '', ports = '') {
     const container = document.getElementById('regionOverridesContainer');
     const row = document.createElement('div');
-    row.className = 'row mb-3 align-items-end border p-2 rounded bg-light';
+    row.className = 'row mb-3 align-items-end border p-2 rounded bg-light override-row';
+    
+    let optionsHtml = '<option value="">-- Select Region --</option>';
+    for (const [rName, rData] of Object.entries(globalRegions)) {
+        const selected = (rName === region) ? 'selected' : '';
+        optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
+    }
+
     row.innerHTML = `
         <div class="col-md-3">
             <label class="form-label small">Region Name</label>
-            <input type="text" name="override_region[]" class="form-control form-control-sm" placeholder="e.g. ap-south-1" value="${region}">
+            <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)" required>
+                ${optionsHtml}
+            </select>
         </div>
         <div class="col-md-4">
             <label class="form-label small">Security Group IDs (comma-separated)</label>
-            <input type="text" name="override_sgs[]" class="form-control form-control-sm" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
+            <input type="text" name="override_sgs[]" class="form-control form-control-sm sg-input" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
         </div>
         <div class="col-md-3">
             <label class="form-label small">Ports to Open</label>
@@ -89,6 +105,19 @@ function addOverrideRow(region = '', sgs = '', ports = '') {
         </div>
     `;
     container.appendChild(row);
+}
+
+function updateSgs(selectElement) {
+    const region = selectElement.value;
+    const row = selectElement.closest('.override-row');
+    const sgInput = row.querySelector('.sg-input');
+    
+    if (region && globalRegions[region]) {
+        const sgs = globalRegions[region].securityGrpIds || [];
+        sgInput.value = sgs.join(', ');
+    } else {
+        sgInput.value = '';
+    }
 }
 </script>
 </div>

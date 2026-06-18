@@ -253,18 +253,29 @@
 </div>
 
 <script>
+const globalRegions = {{ global_regions | tojson | safe }};
+
 function addOverrideRow(region = '', sgs = '', ports = '') {
     const container = document.getElementById('regionOverridesContainer');
     const row = document.createElement('div');
     row.className = 'override-row';
+    
+    let optionsHtml = '<option value="">-- Select Region --</option>';
+    for (const [rName, rData] of Object.entries(globalRegions)) {
+        const selected = (rName === region) ? 'selected' : '';
+        optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
+    }
+    
     row.innerHTML = `
         <div class="override-col" style="flex: 0.8">
             <label class="form-label" style="font-size: 11px;">Region Name</label>
-            <input type="text" name="override_region[]" class="form-control" placeholder="e.g. ap-south-1" value="${region}">
+            <select name="override_region[]" class="form-select region-select" onchange="updateSgs(this)" required>
+                ${optionsHtml}
+            </select>
         </div>
         <div class="override-col" style="flex: 1.5">
             <label class="form-label" style="font-size: 11px;">Security Group IDs</label>
-            <input type="text" name="override_sgs[]" class="form-control" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
+            <input type="text" name="override_sgs[]" class="form-control sg-input" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
         </div>
         <div class="override-col" style="flex: 1">
             <label class="form-label" style="font-size: 11px;">Ports to Open</label>
@@ -275,6 +286,19 @@ function addOverrideRow(region = '', sgs = '', ports = '') {
         </div>
     `;
     container.appendChild(row);
+}
+
+function updateSgs(selectElement) {
+    const region = selectElement.value;
+    const row = selectElement.closest('.override-row');
+    const sgInput = row.querySelector('.sg-input');
+    
+    if (region && globalRegions[region]) {
+        const sgs = globalRegions[region].securityGrpIds || [];
+        sgInput.value = sgs.join(', ');
+    } else {
+        sgInput.value = '';
+    }
 }
 </script>
 
