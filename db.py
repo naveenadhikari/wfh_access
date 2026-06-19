@@ -18,6 +18,7 @@ Run this file directly to (re)create the database:
 import sqlite3
 import json
 import os
+import secrets
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "access.db")
 
@@ -43,6 +44,9 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             otp_seed TEXT NOT NULL,
+            role TEXT DEFAULT 'superadmin',
+            permissions TEXT DEFAULT '{}',
+            api_token TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -133,6 +137,14 @@ def migrate_db():
         conn.execute("ALTER TABLE wfh_users ADD COLUMN ssh_public_key TEXT")
     if "ssh_key_updated_at" not in cols:
         conn.execute("ALTER TABLE wfh_users ADD COLUMN ssh_key_updated_at TEXT")
+        
+    admin_cols = {row[1] for row in conn.execute("PRAGMA table_info(admins)").fetchall()}
+    if "role" not in admin_cols:
+        conn.execute("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'superadmin'")
+    if "permissions" not in admin_cols:
+        conn.execute("ALTER TABLE admins ADD COLUMN permissions TEXT DEFAULT '{}'")
+    if "api_token" not in admin_cols:
+        conn.execute("ALTER TABLE admins ADD COLUMN api_token TEXT")
     
     # New table migration
     conn.execute("""
@@ -254,6 +266,71 @@ def set_global_setting(key, value):
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, json.dumps(value))
     )
+    conn.commit()
+    conn.close()
+
+# ---------------------------------------------------------------------------
+# Admin Management (RBAC)
+# ---------------------------------------------------------------------------
+def get_all_admins():
+    conn = get_db()
+    rows = conn.execute("SELECT id, username, role, permissions, api_token, created_at FROM admins").fetchall()
+    conn.close()
+    
+    admins = []
+    for r in rows:
+        d = dict(r)
+        d["permissions"] = json.loads(d["permissions"]) if d["permissions"] else {}
+        admins.append(d)
+    return admins
+
+
+def get_admin(username):
+    conn = get_db()
+    row = conn.execute("SELECT id, username, role, permissions, api_token, created_at FROM admins WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    if row:
+        d = dict(row)
+        d["permissions"] = json.loads(d["permissions"]) if d["permissions"] else {}
+        return d
+    return None
+
+
+def get_admin_by_api_token(token):
+    if not token:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT id, username, role, permissions, api_token, created_at FROM admins WHERE api_token = ?", (token,)).fetchone()
+    conn.close()
+    if row:
+        d = dict(row)
+        d["permissions"] = json.loads(d["permissions"]) if d["permissions"] else {}
+        return d
+    return None
+
+
+def update_admin_permissions(username, role, permissions):
+    conn = get_db()
+    conn.execute(
+        "UPDATE admins SET role = ?, permissions = ? WHERE username = ?",
+        (role, json.dumps(permissions), username)
+    )
+    conn.commit()
+    conn.close()
+
+
+def generate_admin_api_token(username):
+    token = secrets.token_hex(32)
+    conn = get_db()
+    conn.execute("UPDATE admins SET api_token = ? WHERE username = ?", (token, username))
+    conn.commit()
+    conn.close()
+    return token
+
+
+def delete_admin(username):
+    conn = get_db()
+    conn.execute("DELETE FROM admins WHERE username = ?", (username,))
     conn.commit()
     conn.close()
 

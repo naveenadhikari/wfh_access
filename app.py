@@ -33,7 +33,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
 from auth import verify_admin, verify_wfh_user, hash_password, check_password, verify_otp_with_seed, generate_otp_seed
-from db import get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key, delete_user_ssh_key, get_all_ssh_key_status, migrate_db
+from db import get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key, delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin, update_admin_permissions, generate_admin_api_token, get_admin_by_api_token, delete_admin
 from config_writer import add_user_to_config, user_exists, list_users, get_access_cfg
 from manage_wfh_access import grant_authorized_access
 from ssh_keys import normalize_ssh_public_key
@@ -53,6 +53,24 @@ def login_required(view_func):
             return redirect(url_for("login"))
         return view_func(*args, **kwargs)
     return wrapped
+
+def require_any_permission(*perm_names):
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapped(*args, **kwargs):
+            if not session.get("admin_username"):
+                flash("Please log in first.", "error")
+                return redirect(url_for("login"))
+            role = session.get("admin_role")
+            if role == "superadmin":
+                return view_func(*args, **kwargs)
+            perms = session.get("admin_permissions", {})
+            if any(perms.get(p) for p in perm_names):
+                return view_func(*args, **kwargs)
+            flash(f"You do not have permission ({' or '.join(perm_names)}).", "error")
+            return redirect(url_for("dashboard"))
+        return wrapped
+    return decorator
 
 
 def employee_login_required(view_func):
@@ -148,6 +166,15 @@ def login():
         if verify_admin(username, password, otp):
             session.pop("employee_username", None)
             session["admin_username"] = username
+            
+            admin_data = get_admin(username)
+            if admin_data:
+                session["admin_role"] = admin_data["role"]
+                session["admin_permissions"] = admin_data["permissions"]
+            else:
+                session["admin_role"] = "superadmin"
+                session["admin_permissions"] = {}
+                
             flash("Logged in successfully.", "success")
             return redirect(url_for("dashboard"))
 
@@ -156,10 +183,8 @@ def login():
             session["employee_username"] = employee_username
             access_result = _grant_employee_access(employee_username)
             flash("Logged in successfully. WFH access has been opened for your IP.", "success")
-            return render_template(
-                "employee_dashboard.html",
-                **_employee_dashboard_context(employee_username, access_result=access_result),
-            )
+            session["employee_access_result"] = access_result
+            return redirect(url_for("employee_dashboard"))
 
         flash("Invalid username, password, or OTP.", "error")
 
@@ -188,13 +213,15 @@ def admin_logout():
 @app.route("/admin/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html")
+    admin_data = get_admin(session["admin_username"])
+    api_token = admin_data.get("api_token") if admin_data else None
+    return render_template("dashboard.html", api_token=api_token)
 
 
 
 # View Users page
 @app.route("/admin/users")
-@login_required
+@require_any_permission("can_view_users_and_logs", "can_manage_users")
 def view_users():
     users = list_users()
     ssh_key_status = get_all_ssh_key_status()
@@ -205,7 +232,7 @@ def view_users():
 # Add User
 
 @app.route("/admin/add-user", methods=["GET", "POST"])
-@login_required
+@require_any_permission("can_add_user", "can_manage_users")
 def add_user():
     conn = get_db()
     role_templates = conn.execute("SELECT * FROM role_templates").fetchall()
@@ -348,7 +375,7 @@ def add_user():
 
 # Edit User
 @app.route("/admin/edit-user/<username>", methods=["GET", "POST"])
-@login_required
+@require_any_permission("can_manage_users")
 def edit_user(username):
     cfg = get_access_cfg()
     user = cfg["ALLOWED_USR_IDENTITIES"].get(username)
@@ -435,7 +462,7 @@ def edit_user(username):
 
 # Delete User
 @app.route("/admin/delete-user/<username>", methods=["POST"])
-@login_required
+@require_any_permission("can_manage_users")
 def delete_user(username):
     if not user_exists(username):
         flash(f"User '{username}' not found.", "error")
@@ -460,14 +487,14 @@ def delete_user(username):
 
 # Audit Log page
 @app.route("/admin/audit-log")
-@login_required
+@require_any_permission("can_view_users_and_logs")
 def view_audit_log():
     audit_entries = get_recent_audit_entries(limit=50)
     return render_template("audit_log.html", audit_entries=audit_entries)
 
 
 @app.route("/admin/user/<username>/ssh-key")
-@login_required
+@require_any_permission("can_view_users_and_logs", "can_manage_users", "can_fetch_credentials")
 def view_user_ssh_key(username):
     if not user_exists(username):
         flash(f"User '{username}' not found.", "error")
@@ -479,6 +506,87 @@ def view_user_ssh_key(username):
         username=username,
         ssh_keys=ssh_keys,
     )
+
+
+# Admins Management
+@app.route("/admin/admins", methods=["GET"])
+@login_required
+def view_admins():
+    if session.get("admin_role") != "superadmin":
+        flash("Only superadmins can manage admins.", "error")
+        return redirect(url_for("dashboard"))
+    admins = get_all_admins()
+    return render_template("admins.html", admins=admins)
+
+@app.route("/admin/admins/add", methods=["POST"])
+@login_required
+def add_admin_route():
+    if session.get("admin_role") != "superadmin":
+        return redirect(url_for("view_admins"))
+    
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    
+    if not username or not password:
+        flash("Username and password are required.", "error")
+        return redirect(url_for("view_admins"))
+        
+    perms = {
+        "can_fetch_credentials": bool(request.form.get("can_fetch_credentials")),
+        "can_add_user": bool(request.form.get("can_add_user")),
+        "can_manage_users": bool(request.form.get("can_manage_users")),
+        "can_view_users_and_logs": bool(request.form.get("can_view_users_and_logs"))
+    }
+    
+    from auth import seed_admin
+    otp_seed = seed_admin(username, password)
+    update_admin_permissions(username, "subadmin", perms)
+    generate_admin_api_token(username)
+    
+    qr_code_b64 = generate_qr_code_b64(otp_seed, username, issuer="Admin-Access")
+    return render_template("admin_created.html", username=username, password=password, otp_seed=otp_seed, qr_code_b64=qr_code_b64)
+
+@app.route("/admin/admins/<username>/update", methods=["POST"])
+@login_required
+def update_admin_route(username):
+    if session.get("admin_role") != "superadmin":
+        return redirect(url_for("view_admins"))
+    
+    perms = {
+        "can_fetch_credentials": bool(request.form.get("can_fetch_credentials")),
+        "can_add_user": bool(request.form.get("can_add_user")),
+        "can_manage_users": bool(request.form.get("can_manage_users")),
+        "can_view_users_and_logs": bool(request.form.get("can_view_users_and_logs"))
+    }
+    role = request.form.get("role", "subadmin")
+    
+    update_admin_permissions(username, role, perms)
+    flash(f"Permissions updated for {username}.", "success")
+    return redirect(url_for("view_admins"))
+
+@app.route("/admin/admins/<username>/token", methods=["POST"])
+@login_required
+def generate_admin_token(username):
+    if session.get("admin_role") != "superadmin":
+        return redirect(url_for("view_admins"))
+    
+    generate_admin_api_token(username)
+    flash(f"New API token generated for {username}.", "success")
+    return redirect(url_for("view_admins"))
+    
+@app.route("/admin/admins/<username>/delete", methods=["POST"])
+@login_required
+def delete_admin_route(username):
+    if session.get("admin_role") != "superadmin":
+        return redirect(url_for("view_admins"))
+    
+    if username == session.get("admin_username"):
+        flash("You cannot delete yourself.", "error")
+        return redirect(url_for("view_admins"))
+        
+    delete_admin(username)
+    flash(f"Admin {username} deleted.", "success")
+    return redirect(url_for("view_admins"))
 
 
 # Employee portal
@@ -496,6 +604,7 @@ def employee_logout():
 @employee_login_required
 def employee_dashboard():
     username = session["employee_username"]
+    access_result = session.pop("employee_access_result", None)
 
     if request.method == "POST":
         action = request.form.get("action")
@@ -508,7 +617,7 @@ def employee_dashboard():
                 flash("Invalid SSH public key. Paste a single-line key (ssh-rsa, ssh-ed25519, etc.).", "error")
                 return render_template(
                     "employee_dashboard.html",
-                    **_employee_dashboard_context(username),
+                    **_employee_dashboard_context(username, access_result=access_result),
                 )
 
             add_user_ssh_key(username, key_name, normalized_key)
@@ -521,7 +630,7 @@ def employee_dashboard():
             flash("SSH public key saved successfully.", "success")
             return redirect(url_for("employee_dashboard"))
 
-    return render_template("employee_dashboard.html", **_employee_dashboard_context(username))
+    return render_template("employee_dashboard.html", **_employee_dashboard_context(username, access_result=access_result))
 
 
 @app.route("/employee/ssh-key/delete/<int:key_id>", methods=["POST"])
@@ -585,6 +694,49 @@ def generate_ssh_key():
     )
 
 
+# Script API for Credentials
+@app.route("/api/v1/users/<username>/credentials", methods=["GET"])
+def api_get_credentials(username):
+    # Verify Authorization header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    token = auth_header.split(" ")[1]
+    admin = get_admin_by_api_token(token)
+    
+    if not admin:
+        return jsonify({"error": "Forbidden"}), 403
+        
+    if admin["role"] != "superadmin" and not admin["permissions"].get("can_fetch_credentials"):
+        return jsonify({"error": "Forbidden. Missing can_fetch_credentials permission."}), 403
+
+    if not user_exists(username):
+        return jsonify({"error": "User not found"}), 404
+
+    from config_writer import get_access_cfg
+    cfg = get_access_cfg()
+    user_info = cfg["ALLOWED_USR_IDENTITIES"].get(username, {})
+    
+    ssh_keys = get_user_ssh_keys(username)
+    
+    response_data = {
+        "username": username,
+        "otp_seed": user_info.get("otpSeed"),
+        "ssh_keys": [
+            {
+                "id": k["id"],
+                "name": k["key_name"],
+                "public_key": k["ssh_public_key"],
+                "created_at": k["created_at"]
+            }
+            for k in ssh_keys
+        ]
+    }
+    
+    return jsonify(response_data)
+
+
 # Legacy request-access URL (redirects to unified employee portal)
 @app.route("/request-access", methods=["GET", "POST"])
 def request_access():
@@ -603,10 +755,8 @@ def request_access():
         session.pop("admin_username", None)
         session["employee_username"] = username
         access_result = _grant_employee_access(username)
-        return render_template(
-            "employee_dashboard.html",
-            **_employee_dashboard_context(username, access_result=access_result),
-        )
+        session["employee_access_result"] = access_result
+        return redirect(url_for("employee_dashboard"))
 
     flash("Invalid username, password, or OTP.", "error")
     return redirect(url_for("login"))

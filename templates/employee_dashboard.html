@@ -352,6 +352,43 @@
             border-radius: 4px;
             word-break: break-all;
         }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+            gap: 24px;
+        }
+        
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 0 0 12px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab-btn:hover {
+            color: var(--text-main);
+        }
+        
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -394,8 +431,6 @@
                         <div class="status-ip">Access has been granted to your current IP address.</div>
                     </div>
                 </div>
-                <!-- Optional: Show technical output from AWS -->
-                <div class="access-log">{{ access_result }}</div>
             </div>
         </div>
         {% endif %}
@@ -448,7 +483,7 @@
         <div class="card">
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h3>SSH Public Keys</h3>
-                <form action="{{ url_for('generate_ssh_key') }}" method="POST" style="margin: 0;">
+                <form action="{{ url_for('generate_ssh_key') }}" method="POST" style="margin: 0;" onsubmit="setTimeout(() => window.location.reload(), 1000);">
                     <button type="submit" class="btn-secondary" onclick="return confirm('This will generate a new Ed25519 key pair. The private key will be downloaded to your computer and the public key will be saved here. Continue?')">
                         Generate New Key Pair
                     </button>
@@ -505,8 +540,82 @@
                 </form>
             </div>
         </div>
+        
+        <!-- Section 4: SSH Key Usage Guide -->
+        <div class="card" style="margin-bottom: 48px;">
+            <div class="card-header">
+                <h3>How to use your SSH Key</h3>
+            </div>
+            <div class="card-body">
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 24px;">Once you have uploaded or generated an SSH key, you can use it to securely connect to servers that your account has access to. If you generated a key here, a file named <code>id_ed25519</code> was downloaded to your computer.</p>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="openTab(event, 'tab-linux')">Linux & Mac</button>
+                    <button class="tab-btn" onclick="openTab(event, 'tab-windows')">Windows (OpenSSH)</button>
+                    <button class="tab-btn" onclick="openTab(event, 'tab-putty')">Windows (PuTTY)</button>
+                </div>
+                
+                <!-- Linux & Mac Tab -->
+                <div id="tab-linux" class="tab-content active">
+                    <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">1. Set correct permissions</h4>
+                    <p style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">Ensure your private key file has the correct permissions so it isn't rejected.</p>
+                    <div style="background-color: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; margin-bottom: 16px;">
+                        chmod 600 ~/Downloads/id_ed25519
+                    </div>
+                    
+                    <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">2. Connect to the server</h4>
+                    <p style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">Use the <code>-i</code> flag to specify your private key file.</p>
+                    <div style="background-color: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; margin-bottom: 16px;">
+                        ssh -i ~/Downloads/id_ed25519 {{ username }}@claude-server.yourdomain.com
+                    </div>
+                </div>
+
+                <!-- Windows (OpenSSH) Tab -->
+                <div id="tab-windows" class="tab-content">
+                    <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">1. Open Command Prompt or PowerShell</h4>
+                    <p style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 16px;">Recent versions of Windows 10 and Windows 11 include an SSH client by default.</p>
+                    
+                    <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">2. Connect to the server</h4>
+                    <p style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">Run the following command, adjusting the path to where your key is saved.</p>
+                    <div style="background-color: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; margin-bottom: 16px;">
+                        ssh -i %USERPROFILE%\Downloads\id_ed25519 {{ username }}@claude-server.yourdomain.com
+                    </div>
+                </div>
+
+                <!-- Windows (PuTTY) Tab -->
+                <div id="tab-putty" class="tab-content">
+                    <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">1. Convert your key using PuTTYgen</h4>
+                    <p style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">PuTTY uses its own key format (.ppk). Open PuTTYgen, click <strong>Load</strong> (select "All Files (*.*)"), load your downloaded <code>id_ed25519</code> file, then click <strong>Save private key</strong>.</p>
+                    
+                    <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">2. Configure PuTTY</h4>
+                    <ul style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 16px; padding-left: 20px;">
+                        <li style="margin-bottom: 4px;">Open PuTTY and go to <strong>Session</strong>. Enter <code>claude-server.yourdomain.com</code> in the Host Name box.</li>
+                        <li style="margin-bottom: 4px;">Navigate to <strong>Connection</strong> &gt; <strong>Data</strong> and enter <code>{{ username }}</code> in the "Auto-login username" field.</li>
+                        <li style="margin-bottom: 4px;">Navigate to <strong>Connection</strong> &gt; <strong>SSH</strong> &gt; <strong>Auth</strong> &gt; <strong>Credentials</strong>.</li>
+                        <li style="margin-bottom: 4px;">Browse and select your newly converted <code>.ppk</code> file in the "Private key file for authentication" field.</li>
+                        <li style="margin-bottom: 4px;">Go back to <strong>Session</strong>, give it a name under "Saved Sessions" and click <strong>Save</strong>, then click <strong>Open</strong> to connect.</li>
+                    </ul>
+                </div>
+                
+                <div class="alert" style="background-color: #EFF6FF; border-color: #BFDBFE; color: #1E40AF; margin-bottom: 0;">
+                    <strong>Security Notice:</strong> Never share your private key file with anyone. The server only stores your public key.
+                </div>
+            </div>
+        </div>
 
     </div>
 
+    <script>
+        function openTab(event, tabId) {
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(content => content.classList.remove('active'));
+            
+            const buttons = document.querySelectorAll('.tab-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+    </script>
 </body>
 </html>

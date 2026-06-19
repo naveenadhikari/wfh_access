@@ -90,13 +90,26 @@
         <div class="sidebar-menu">
             <a href="{{ url_for('dashboard') }}"
                 class="menu-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+            
+            {% if session.get('admin_role') == 'superadmin' %}
+            <a href="{{ url_for('view_admins') }}"
+                class="menu-item {% if request.endpoint == 'view_admins' %}active{% endif %}">Manage Admins</a>
+            {% endif %}
+
+            {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_add_user') or session.get('admin_permissions', {}).get('can_manage_users') %}
             <a href="{{ url_for('add_user') }}"
                 class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
+            {% endif %}
+
+            {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_manage_users') or session.get('admin_permissions', {}).get('can_view_users_and_logs') %}
             <a href="{{ url_for('view_users') }}"
-                class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View
-                Users</a>
+                class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View Users</a>
+            {% endif %}
+
+            {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_view_users_and_logs') %}
             <a href="{{ url_for('view_audit_log') }}"
                 class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
+            {% endif %}
 
             <div class="menu-divider"></div>
 

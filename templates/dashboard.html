@@ -1,80 +1,147 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>WFH Access - Admin Dashboard</title>
+{% extends "admin_layout.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Dashboard</h1>
+<p class="welcome-msg">Welcome {{ session['admin_username'] or 'admin' }}</p>
+
+<div class="cards-grid">
+    {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_add_user') or session.get('admin_permissions', {}).get('can_manage_users') %}
+    <a href="{{ url_for('add_user') }}" class="action-card">
+        <h2 class="card-title">Add New User</h2>
+        <p class="card-desc">Create a new WFH access account</p>
+    </a>
+    {% endif %}
+
+    {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_manage_users') or session.get('admin_permissions', {}).get('can_view_users_and_logs') %}
+    <a href="{{ url_for('view_users') }}" class="action-card">
+        <h2 class="card-title">View Users</h2>
+        <p class="card-desc">See all users, edit or delete them</p>
+    </a>
+    {% endif %}
+
+    {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_view_users_and_logs') %}
+    <a href="{{ url_for('view_audit_log') }}" class="action-card">
+        <h2 class="card-title">Audit Log</h2>
+        <p class="card-desc">See recent admin activity</p>
+    </a>
+    {% endif %}
     
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-</head>
-<body>
-
-<!-- Sidebar -->
-<div class="sidebar">
-    <div class="sidebar-header">
-        Admin Access
-    </div>
-    <div class="sidebar-menu">
-        <a href="{{ url_for('dashboard') }}" class="menu-item active">Dashboard</a>
-        <!-- Future connection placeholders -->
-        <a href="#" class="menu-item">AWS Region Management</a>
-        <a href="#" class="menu-item">Button 2</a>
-    </div>
+    {% if session.get('admin_role') == 'superadmin' %}
+    <a href="{{ url_for('view_admins') }}" class="action-card" style="border-left-color: #8B5CF6;">
+        <h2 class="card-title">Manage Admins</h2>
+        <p class="card-desc">Manage sub-admins and their permissions</p>
+    </a>
+    {% endif %}
 </div>
 
-<!-- Main Area -->
-<div class="main-wrapper">
-    <!-- Header -->
-    <div class="top-header">
-        <div class="profile-info">
-            <div class="avatar">
-                <!-- Fallback to 'A' if session username is missing -->
-                {{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}
+{% if session.get('admin_role') != 'superadmin' and session.get('admin_permissions', {}).get('can_fetch_credentials') %}
+<div class="row mt-5">
+    <div class="col-md-6">
+        <div class="card-custom">
+            <h2 class="h5 mb-3">Fetch User Credentials</h2>
+            <p class="text-muted" style="font-size: 13px;">Enter an employee's username to quickly retrieve their OTP seed and SSH keys.</p>
+            <div class="d-flex mb-3">
+                <input type="text" id="fetch-username" class="form-control me-2" placeholder="Employee username">
+                <button onclick="fetchCredentials()" class="btn btn-primary" id="fetch-btn">Fetch</button>
             </div>
-            <div class="username">{{ session['admin_username'] or 'admin' }}</div>
-            <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+            
+            <div id="fetch-results" style="display: none; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px;">
+                <h6 class="mb-2">OTP Seed</h6>
+                <div class="d-flex align-items-center mb-3">
+                    <code id="res-otp" style="flex:1; background: white; padding: 6px; border: 1px solid #CBD5E1; border-radius: 4px; font-size: 13px;"></code>
+                    <button class="btn btn-sm btn-light border ms-2" onclick="navigator.clipboard.writeText(document.getElementById('res-otp').innerText)">Copy</button>
+                </div>
+                
+                <h6 class="mb-2">SSH Keys</h6>
+                <div id="res-ssh" style="max-height: 150px; overflow-y: auto;"></div>
+            </div>
+            <div id="fetch-error" class="text-danger mt-2" style="font-size: 13px; display: none;"></div>
         </div>
     </div>
-
-    <!-- Content -->
-    <div class="content">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <div>
-            {% for category, message in messages %}
-              <div class="alert {% if category == 'error' %}alert-error{% endif %}">{{ message }}</div>
-            {% endfor %}
+    <div class="col-md-6">
+        <div class="card-custom h-100">
+            <h2 class="h5 mb-3">Your Script API Token</h2>
+            <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">Use your personal token to authenticate your scripts to fetch user SSH keys.</p>
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <strong style="display: block; font-size: 12px; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">API Bearer Token</strong>
+                    <span style="font-family: monospace; font-size: 14px;" id="api-token" data-token="{{ api_token if api_token else '' }}">{{ api_token if api_token else "No token generated yet. Please ask Superadmin to generate." }}</span>
+                </div>
+                {% if api_token %}
+                <button onclick="copyToken()" class="btn btn-sm btn-light border">Copy Token</button>
+                {% endif %}
             </div>
-          {% endif %}
-        {% endwith %}
-
-        <h1 class="page-title">Dashboard</h1>
-        <p class="welcome-msg">Welcome {{ session['admin_username'] or 'admin' }}</p>
-
-        <div class="cards-grid">
-            <!-- Card 1 -->
-            <a href="{{ url_for('add_user') }}" class="action-card">
-                <h2 class="card-title">Add New User</h2>
-                <p class="card-desc">Create a new WFH access account</p>
-            </a>
-
-            <!-- Card 2 -->
-            <a href="{{ url_for('view_users') }}" class="action-card">
-                <h2 class="card-title">View Users</h2>
-                <p class="card-desc">See all users, edit or delete them</p>
-            </a>
-
-            <!-- Card 3 -->
-            <a href="{{ url_for('view_audit_log') }}" class="action-card">
-                <h2 class="card-title">Audit Log</h2>
-                <p class="card-desc">See recent admin activity</p>
-            </a>
+            <p style="font-size: 12px; color: #64748B; margin-top: 12px;"><strong>Example usage:</strong> <code>curl -H "Authorization: Bearer &lt;token&gt;" http://your-server:6300/api/v1/users/&lt;username&gt;/credentials</code></p>
         </div>
     </div>
 </div>
 
-</body>
-</html>
+<script>
+function copyToken() {
+    const tokenText = document.getElementById("api-token").innerText;
+    navigator.clipboard.writeText(tokenText).then(() => {
+        alert("API Token copied to clipboard!");
+    });
+}
+
+function fetchCredentials() {
+    const username = document.getElementById('fetch-username').value.trim();
+    const token = document.getElementById('api-token').getAttribute('data-token');
+    const btn = document.getElementById('fetch-btn');
+    const resDiv = document.getElementById('fetch-results');
+    const errDiv = document.getElementById('fetch-error');
+    
+    if (!username) return;
+    if (!token) {
+        errDiv.innerText = "You do not have an API token generated.";
+        errDiv.style.display = 'block';
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.innerText = '...';
+    errDiv.style.display = 'none';
+    resDiv.style.display = 'none';
+    
+    fetch(`/api/v1/users/${username}/credentials`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json().then(data => ({status: res.status, body: data})))
+    .then(obj => {
+        btn.disabled = false;
+        btn.innerText = 'Fetch';
+        if (obj.status !== 200) {
+            errDiv.innerText = obj.body.error || "An error occurred.";
+            errDiv.style.display = 'block';
+        } else {
+            document.getElementById('res-otp').innerText = obj.body.otp_seed || 'N/A';
+            const sshDiv = document.getElementById('res-ssh');
+            sshDiv.innerHTML = '';
+            if (obj.body.ssh_keys && obj.body.ssh_keys.length > 0) {
+                obj.body.ssh_keys.forEach(k => {
+                    sshDiv.innerHTML += `
+                        <div class="d-flex align-items-center mb-2">
+                            <span style="font-size: 12px; color: #64748B; width: 100px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${k.name}</span>
+                            <code style="flex:1; background: white; padding: 4px; border: 1px solid #CBD5E1; border-radius: 4px; font-size: 11px; margin: 0 8px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${k.public_key}</code>
+                            <button class="btn btn-sm btn-light border py-0 px-2" style="font-size: 11px;" onclick="navigator.clipboard.writeText('${k.public_key}')">Copy</button>
+                        </div>
+                    `;
+                });
+            } else {
+                sshDiv.innerHTML = '<p style="font-size: 13px; color: #64748B;">No SSH keys found.</p>';
+            }
+            resDiv.style.display = 'block';
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerText = 'Fetch';
+        errDiv.innerText = "Network error.";
+        errDiv.style.display = 'block';
+    });
+}
+</script>
+{% endif %}
+
+{% endblock %}
