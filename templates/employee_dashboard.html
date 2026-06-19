@@ -389,6 +389,39 @@
         .tab-content.active {
             display: block;
         }
+
+        .mgmt-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .mgmt-link {
+            display: block;
+            padding: 16px;
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .mgmt-link:hover {
+            background: #EFF6FF;
+            border-color: #BFDBFE;
+            color: var(--primary);
+        }
+
+        .mgmt-link span {
+            display: block;
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -416,6 +449,71 @@
             </div>
           {% endif %}
         {% endwith %}
+
+        {% if has_subadmin_access %}
+        <!-- SubAdmin: Management Quick Links -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Management Tools</h3>
+            </div>
+            <div class="card-body">
+                <div class="mgmt-links">
+                    {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('add_user') }}" class="mgmt-link">Add User<span>Create a new employee account</span></a>
+                    {% endif %}
+                    {% if employee_permissions.get('can_view_users_and_logs') or employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('view_users') }}" class="mgmt-link">View Users<span>Browse and manage employees</span></a>
+                    {% endif %}
+                    {% if employee_permissions.get('can_view_users_and_logs') %}
+                    <a href="{{ url_for('view_audit_log') }}" class="mgmt-link">Audit Log<span>Recent management activity</span></a>
+                    {% endif %}
+                    {% if employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('view_regions') }}" class="mgmt-link">AWS Regions<span>Manage region configuration</span></a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if employee_permissions.get('can_fetch_credentials') %}
+        <!-- SubAdmin: Fetch Credentials -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Fetch User Credentials</h3>
+            </div>
+            <div class="card-body">
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0;">Enter an employee's username to retrieve their OTP seed and SSH keys.</p>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <input type="text" id="fetch-username" class="form-control" placeholder="Employee username" style="min-height: auto; flex: 1;">
+                    <button onclick="fetchCredentials()" class="btn-primary" id="fetch-btn" type="button">Fetch</button>
+                </div>
+                <div id="fetch-results" style="display: none; background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+                    <h4 style="margin: 0 0 8px; font-size: 14px;">OTP Seed</h4>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                        <code id="res-otp" style="flex:1; background: white; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; word-break: break-all;"></code>
+                        <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('res-otp').innerText)">Copy</button>
+                    </div>
+                    <h4 style="margin: 0 0 8px; font-size: 14px;">SSH Keys</h4>
+                    <div id="res-ssh" style="max-height: 150px; overflow-y: auto;"></div>
+                </div>
+                <div id="fetch-error" style="color: #DC2626; font-size: 13px; display: none; margin-top: 8px;"></div>
+
+                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
+                    <h4 style="margin: 0 0 8px; font-size: 14px;">Your Script API Token</h4>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">Use this token to authenticate scripts for the credentials API.</p>
+                    <div style="background: #F8FAFC; border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <code id="api-token" data-token="{{ api_token if api_token else '' }}" style="font-size: 13px; word-break: break-all;">{{ api_token if api_token else "No token generated yet" }}</code>
+                        {% if api_token %}
+                        <button class="btn-secondary" style="padding: 8px 12px; flex-shrink: 0;" onclick="navigator.clipboard.writeText(document.getElementById('api-token').innerText)">Copy</button>
+                        {% endif %}
+                    </div>
+                    <form action="{{ url_for('generate_employee_api_token_route') }}" method="POST" style="margin-top: 12px;">
+                        <button type="submit" class="btn-secondary">{% if api_token %}Regenerate{% else %}Generate{% endif %} API Token</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
 
         <!-- Section 1: Access Status -->
         {% if access_result %}
@@ -616,6 +714,64 @@
             document.getElementById(tabId).classList.add('active');
             event.currentTarget.classList.add('active');
         }
+
+        {% if employee_permissions.get('can_fetch_credentials') %}
+        function fetchCredentials() {
+            const username = document.getElementById('fetch-username').value.trim();
+            const token = document.getElementById('api-token').getAttribute('data-token');
+            const btn = document.getElementById('fetch-btn');
+            const resDiv = document.getElementById('fetch-results');
+            const errDiv = document.getElementById('fetch-error');
+
+            if (!username) return;
+            if (!token) {
+                errDiv.innerText = "Generate an API token first.";
+                errDiv.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = '...';
+            errDiv.style.display = 'none';
+            resDiv.style.display = 'none';
+
+            fetch(`/api/v1/users/${username}/credentials`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.json().then(data => ({status: res.status, body: data})))
+            .then(obj => {
+                btn.disabled = false;
+                btn.innerText = 'Fetch';
+                if (obj.status !== 200) {
+                    errDiv.innerText = obj.body.error || "An error occurred.";
+                    errDiv.style.display = 'block';
+                } else {
+                    document.getElementById('res-otp').innerText = obj.body.otp_seed || 'N/A';
+                    const sshDiv = document.getElementById('res-ssh');
+                    sshDiv.innerHTML = '';
+                    if (obj.body.ssh_keys && obj.body.ssh_keys.length > 0) {
+                        obj.body.ssh_keys.forEach(k => {
+                            sshDiv.innerHTML += `
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                    <span style="font-size:12px; color:#64748B; width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${k.name}</span>
+                                    <code style="flex:1; background:white; padding:4px; border:1px solid #E2E8F0; border-radius:4px; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${k.public_key}</code>
+                                    <button class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="navigator.clipboard.writeText('${k.public_key.replace(/'/g, "\\'")}')">Copy</button>
+                                </div>`;
+                        });
+                    } else {
+                        sshDiv.innerHTML = '<p style="font-size:13px; color:#64748B;">No SSH keys found.</p>';
+                    }
+                    resDiv.style.display = 'block';
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerText = 'Fetch';
+                errDiv.innerText = "Network error.";
+                errDiv.style.display = 'block';
+            });
+        }
+        {% endif %}
     </script>
 </body>
 </html>

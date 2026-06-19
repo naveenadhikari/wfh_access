@@ -37,6 +37,9 @@ def get_access_cfg():
         if u["region_overrides"]:
             user_entry["overRiddenRegionAndCfg"] = u["region_overrides"]
 
+        if u.get("admin_permissions"):
+            user_entry["adminPermissions"] = u["admin_permissions"]
+
         cfg["ALLOWED_USR_IDENTITIES"][username] = user_entry
 
     return cfg
@@ -68,6 +71,7 @@ def add_user_to_config(username, user_entry):
         allow_hp_agent_access=user_entry.get("allowHpAgentAccess", False),
         ports_to_open=user_entry.get("portsToOpen", []),
         region_overrides=region_overrides,
+        admin_permissions=user_entry.get("adminPermissions"),
     )
 
 
@@ -84,6 +88,7 @@ def update_user_in_config(username, user_entry):
         allow_hp_agent_access=user_entry.get("allowHpAgentAccess", False),
         ports_to_open=user_entry.get("portsToOpen", []),
         region_overrides=region_overrides,
+        admin_permissions=user_entry.get("adminPermissions"),
     )
 
 

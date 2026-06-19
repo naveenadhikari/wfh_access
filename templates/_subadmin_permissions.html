@@ -1,0 +1,17 @@
+{# SubAdmin privilege checkboxes — used in add/edit user forms #}
+<div class="mb-4 mt-4 border-top pt-3">
+    <h5>SubAdmin Privileges</h5>
+    <p class="text-muted small">
+        Optional management permissions for this employee. They keep the same employee dashboard
+        but see additional modules based on what you enable here.
+    </p>
+    <div class="p-3 bg-light border rounded">
+        {% for key, label in PERMISSION_DEFINITIONS %}
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="{{ key }}" id="{{ key }}"
+                   {% if (admin_permissions|default({})).get(key) %}checked{% endif %}>
+            <label class="form-check-label" for="{{ key }}">{{ label }}</label>
+        </div>
+        {% endfor %}
+    </div>
+</div>

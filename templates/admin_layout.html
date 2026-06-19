@@ -17,13 +17,19 @@
             background-color: var(--bg-color);
             color: var(--text-main);
             display: flex;
+            flex-direction: column;
             height: 100vh;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .layout-body {
+            display: flex;
+            flex: 1;
             overflow: hidden;
         }
 
-        .sidebar {
-            z-index: 1000;
-        }
+        .sidebar { z-index: 1000; }
 
         .content {
             flex: 1;
@@ -57,81 +63,80 @@
             margin-bottom: 24px;
         }
 
+        .employee-portal-banner {
+            background: #EFF6FF;
+            border-bottom: 1px solid #BFDBFE;
+            padding: 10px 48px;
+            font-size: 13px;
+            color: #1E40AF;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
 
-        .badge-custom {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 500;
-            line-height: 1;
+        .employee-portal-banner a {
+            color: #1D4ED8;
+            font-weight: 600;
             text-decoration: none;
-        }
-
-        .badge-yes {
-            background-color: #DCFCE7;
-            color: #166534;
-        }
-
-        .badge-no {
-            background-color: #F3F4F6;
-            color: #4B5563;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Sidebar -->
+{% if is_employee_portal() %}
+<div class="employee-portal-banner">
+    <span>Management mode — logged in as <strong>{{ session['employee_username'] }}</strong></span>
+    <a href="{{ url_for('employee_dashboard') }}">← Back to Employee Portal</a>
+</div>
+{% endif %}
+
+<div class="layout-body">
     <div class="sidebar">
-        <div class="sidebar-header">
-            Admin Access
-        </div>
+        <div class="sidebar-header">{% if is_employee_portal() %}Employee Portal{% else %}Admin Access{% endif %}</div>
         <div class="sidebar-menu">
-            <a href="{{ url_for('dashboard') }}"
-                class="menu-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
-            
+            {% if is_employee_portal() %}
+            <a href="{{ url_for('employee_dashboard') }}" class="menu-item">My Dashboard</a>
+            {% if has_perm('can_add_user') or has_perm('can_manage_users') %}
+            <a href="{{ url_for('add_user') }}" class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
+            {% endif %}
+            {% if has_perm('can_view_users_and_logs') or has_perm('can_manage_users') %}
+            <a href="{{ url_for('view_users') }}" class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View Users</a>
+            {% endif %}
+            {% if has_perm('can_view_users_and_logs') %}
+            <a href="{{ url_for('view_audit_log') }}" class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
+            {% endif %}
+            {% if has_perm('can_manage_users') %}
+            <a href="{{ url_for('view_regions') }}" class="menu-item {% if request.endpoint == 'view_regions' %}active{% endif %}">AWS Regions</a>
+            {% endif %}
+            {% else %}
+            <a href="{{ url_for('dashboard') }}" class="menu-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
             {% if session.get('admin_role') == 'superadmin' %}
-            <a href="{{ url_for('view_admins') }}"
-                class="menu-item {% if request.endpoint == 'view_admins' %}active{% endif %}">Manage Admins</a>
+            <a href="{{ url_for('view_admins') }}" class="menu-item {% if request.endpoint == 'view_admins' %}active{% endif %}">Manage Admins</a>
             {% endif %}
-
-            {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_add_user') or session.get('admin_permissions', {}).get('can_manage_users') %}
-            <a href="{{ url_for('add_user') }}"
-                class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
-            {% endif %}
-
-            {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_manage_users') or session.get('admin_permissions', {}).get('can_view_users_and_logs') %}
-            <a href="{{ url_for('view_users') }}"
-                class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View Users</a>
-            {% endif %}
-
-            {% if session.get('admin_role') == 'superadmin' or session.get('admin_permissions', {}).get('can_view_users_and_logs') %}
-            <a href="{{ url_for('view_audit_log') }}"
-                class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
-            {% endif %}
-
+            <a href="{{ url_for('add_user') }}" class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
+            <a href="{{ url_for('view_users') }}" class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View Users</a>
+            <a href="{{ url_for('view_audit_log') }}" class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
             <div class="menu-divider"></div>
-
-            <a href="#" class="menu-item">AWS Region Management</a>
-            <a href="#" class="menu-item">Button 2</a>
+            <a href="{{ url_for('view_regions') }}" class="menu-item {% if request.endpoint == 'view_regions' %}active{% endif %}">AWS Region Management</a>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Main Area -->
     <div class="main-wrapper w-100">
-        <!-- Header -->
         <div class="top-header">
             <div class="profile-info">
-                <div class="avatar">
-                    {{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}
-                </div>
+                {% if is_employee_portal() %}
+                <div class="avatar">{{ session['employee_username'][0]|upper }}</div>
+                <div class="username">{{ session['employee_username'] }}</div>
+                {% else %}
+                <div class="avatar">{{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}</div>
                 <div class="username">{{ session['admin_username'] or 'admin' }}</div>
+                {% endif %}
                 <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
             </div>
         </div>
-
-        <!-- Content -->
         <div class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -142,11 +147,10 @@
             </div>
             {% endif %}
             {% endwith %}
-
             {% block content %}{% endblock %}
         </div>
     </div>
+</div>
 
 </body>
-
 </html>

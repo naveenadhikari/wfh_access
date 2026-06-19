@@ -33,18 +33,61 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
 from auth import verify_admin, verify_wfh_user, hash_password, check_password, verify_otp_with_seed, generate_otp_seed
-from db import get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key, delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin, update_admin_permissions, generate_admin_api_token, get_admin_by_api_token, delete_admin
+from db import (
+    get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key,
+    delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin,
+    update_admin_permissions, generate_admin_api_token, get_admin_by_api_token, delete_admin,
+    get_global_setting, set_global_setting, get_wfh_user, get_employee_by_api_token,
+    generate_employee_api_token, update_employee_permissions,
+)
 from config_writer import add_user_to_config, user_exists, list_users, get_access_cfg
 from manage_wfh_access import grant_authorized_access
 from ssh_keys import normalize_ssh_public_key
+from permissions import (
+    ALL_PERMISSIONS, PERMISSION_DEFINITIONS, permissions_from_form,
+    has_any_permission, has_subadmin_access, parse_permissions,
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 migrate_db()
 
 
+@app.context_processor
+def inject_permission_helpers():
+    return {
+        "PERMISSION_DEFINITIONS": PERMISSION_DEFINITIONS,
+        "session_permissions": _session_permissions(),
+        "has_perm": lambda name: _has_permission(name),
+        "is_employee_portal": lambda: bool(session.get("employee_username")),
+    }
+
 
 # Helpers
+def _session_permissions():
+    if session.get("admin_username"):
+        if session.get("admin_role") == "superadmin":
+            return ALL_PERMISSIONS
+        return session.get("admin_permissions") or {}
+    if session.get("employee_username"):
+        return session.get("employee_permissions") or {}
+    return {}
+
+
+def _has_permission(name):
+    return bool(_session_permissions().get(name))
+
+
+def _current_actor():
+    return session.get("admin_username") or session.get("employee_username")
+
+
+def _home_url():
+    if session.get("employee_username"):
+        return url_for("employee_dashboard")
+    return url_for("dashboard")
+
+
 def login_required(view_func):
     @wraps(view_func)
     def wrapped(*args, **kwargs):
@@ -58,17 +101,16 @@ def require_any_permission(*perm_names):
     def decorator(view_func):
         @wraps(view_func)
         def wrapped(*args, **kwargs):
-            if not session.get("admin_username"):
+            if not _current_actor():
                 flash("Please log in first.", "error")
                 return redirect(url_for("login"))
-            role = session.get("admin_role")
-            if role == "superadmin":
+            if session.get("admin_role") == "superadmin":
                 return view_func(*args, **kwargs)
-            perms = session.get("admin_permissions", {})
+            perms = _session_permissions()
             if any(perms.get(p) for p in perm_names):
                 return view_func(*args, **kwargs)
             flash(f"You do not have permission ({' or '.join(perm_names)}).", "error")
-            return redirect(url_for("dashboard"))
+            return redirect(_home_url())
         return wrapped
     return decorator
 
@@ -100,13 +142,17 @@ def _employee_dashboard_context(username, access_result=None):
     from config_writer import get_access_cfg
     cfg = get_access_cfg()
     user_info = cfg["ALLOWED_USR_IDENTITIES"].get(username, {})
-    
+    db_user = get_wfh_user(username) or {}
+    perms = db_user.get("admin_permissions") or {}
     ssh_keys = get_user_ssh_keys(username)
     return {
         "username": username,
         "ssh_keys": ssh_keys,
         "access_result": access_result,
         "user_info": user_info,
+        "employee_permissions": perms,
+        "has_subadmin_access": has_subadmin_access(perms),
+        "api_token": db_user.get("api_token"),
     }
 
 
@@ -128,10 +174,12 @@ def _add_user_form_context(role_templates, role_templates_json):
 
 
 def _edit_user_form_context(username, user):
+    db_user = get_wfh_user(username) or {}
     return {
         "username": username,
         "user": user,
         "global_regions": _get_global_regions(),
+        "admin_permissions": db_user.get("admin_permissions") or {},
     }
 
 
@@ -165,6 +213,7 @@ def login():
 
         if verify_admin(username, password, otp):
             session.pop("employee_username", None)
+            session.pop("employee_permissions", None)
             session["admin_username"] = username
             
             admin_data = get_admin(username)
@@ -180,7 +229,11 @@ def login():
 
         if verify_wfh_user(employee_username, password, otp):
             session.pop("admin_username", None)
+            session.pop("admin_role", None)
+            session.pop("admin_permissions", None)
             session["employee_username"] = employee_username
+            db_user = get_wfh_user(employee_username) or {}
+            session["employee_permissions"] = db_user.get("admin_permissions") or {}
             access_result = _grant_employee_access(employee_username)
             flash("Logged in successfully. WFH access has been opened for your IP.", "success")
             session["employee_access_result"] = access_result
@@ -199,7 +252,11 @@ def admin_login_redirect():
 @app.route("/logout")
 def logout():
     session.pop("admin_username", None)
+    session.pop("admin_role", None)
+    session.pop("admin_permissions", None)
     session.pop("employee_username", None)
+    session.pop("employee_permissions", None)
+    session.pop("employee_access_result", None)
     flash("Logged out.", "success")
     return redirect(url_for("login"))
 
@@ -227,6 +284,94 @@ def view_users():
     ssh_key_status = get_all_ssh_key_status()
     return render_template("users.html", users=users, ssh_key_status=ssh_key_status)
 
+
+# AWS Region Management
+
+@app.route("/admin/regions")
+@require_any_permission("can_manage_users")
+def view_regions():
+    regions = _get_global_regions()
+    return render_template("regions.html", regions=regions)
+
+@app.route("/admin/regions/add", methods=["POST"])
+@require_any_permission("can_manage_users")
+def add_region():
+    region = request.form.get("region", "").strip()
+    sgs_raw = request.form.get("sgs", "").strip()
+    
+    if not region:
+        flash("Region name is required.", "error")
+        return redirect(url_for("view_regions"))
+        
+    sgs = [sg.strip() for sg in sgs_raw.split(",") if sg.strip()]
+    
+    regions = _get_global_regions()
+    if region in regions:
+        flash(f"Region {region} already exists.", "error")
+        return redirect(url_for("view_regions"))
+        
+    regions[region] = {"securityGrpIds": sgs}
+    set_global_setting("regionAndCfg", regions)
+    
+    add_audit_entry(
+        admin_username=_current_actor(),
+        target_user="SYSTEM",
+        action="add_region",
+        details={"region": region, "securityGrpIds": sgs}
+    )
+    
+    flash(f"Region {region} added successfully.", "success")
+    return redirect(url_for("view_regions"))
+
+@app.route("/admin/regions/update", methods=["POST"])
+@require_any_permission("can_manage_users")
+def update_region():
+    region = request.form.get("region", "").strip()
+    sgs_raw = request.form.get("sgs", "").strip()
+    
+    if not region:
+        flash("Region name is required.", "error")
+        return redirect(url_for("view_regions"))
+        
+    sgs = [sg.strip() for sg in sgs_raw.split(",") if sg.strip()]
+    
+    regions = _get_global_regions()
+    if region not in regions:
+        flash(f"Region {region} not found.", "error")
+        return redirect(url_for("view_regions"))
+        
+    regions[region]["securityGrpIds"] = sgs
+    set_global_setting("regionAndCfg", regions)
+    
+    add_audit_entry(
+        admin_username=_current_actor(),
+        target_user="SYSTEM",
+        action="update_region",
+        details={"region": region, "securityGrpIds": sgs}
+    )
+    
+    flash(f"Region {region} updated successfully.", "success")
+    return redirect(url_for("view_regions"))
+
+@app.route("/admin/regions/delete/<region>", methods=["POST"])
+@require_any_permission("can_manage_users")
+def delete_region(region):
+    regions = _get_global_regions()
+    if region in regions:
+        del regions[region]
+        set_global_setting("regionAndCfg", regions)
+        
+        add_audit_entry(
+            admin_username=_current_actor(),
+            target_user="SYSTEM",
+            action="delete_region",
+            details={"region": region}
+        )
+        flash(f"Region {region} deleted successfully.", "success")
+    else:
+        flash(f"Region {region} not found.", "error")
+        
+    return redirect(url_for("view_regions"))
 
 
 # Add User
@@ -335,10 +480,14 @@ def add_user():
         if region_overrides:
             user_entry["overRiddenRegionAndCfg"] = region_overrides
 
+        admin_perms = permissions_from_form(request.form)
+        if has_subadmin_access(admin_perms):
+            user_entry["adminPermissions"] = admin_perms
+
         add_user_to_config(username, user_entry)
 
         add_audit_entry(
-            admin_username=session["admin_username"],
+            admin_username=_current_actor(),
             target_user=username,
             action="create_user",
             details={
@@ -439,11 +588,14 @@ def edit_user(username):
         }
         user_entry["overRiddenRegionAndCfg"] = region_overrides
 
+        admin_perms = permissions_from_form(request.form)
+        user_entry["adminPermissions"] = admin_perms
+
         from config_writer import update_user_in_config
         update_user_in_config(username, user_entry)
 
         add_audit_entry(
-            admin_username=session["admin_username"],
+            admin_username=_current_actor(),
             target_user=username,
             action="edit_user",
             details={
@@ -475,7 +627,7 @@ def delete_user(username):
     conn.close()
 
     add_audit_entry(
-        admin_username=session["admin_username"],
+        admin_username=_current_actor(),
         target_user=username,
         action="delete_user",
         details={"message": "User deleted from database."}
@@ -540,8 +692,7 @@ def add_admin_route():
     
     from auth import seed_admin
     otp_seed = seed_admin(username, password)
-    update_admin_permissions(username, "subadmin", perms)
-    generate_admin_api_token(username)
+    update_admin_permissions(username, "superadmin", {})
     
     qr_code_b64 = generate_qr_code_b64(otp_seed, username, issuer="Admin-Access")
     return render_template("admin_created.html", username=username, password=password, otp_seed=otp_seed, qr_code_b64=qr_code_b64)
@@ -552,16 +703,13 @@ def update_admin_route(username):
     if session.get("admin_role") != "superadmin":
         return redirect(url_for("view_admins"))
     
-    perms = {
-        "can_fetch_credentials": bool(request.form.get("can_fetch_credentials")),
-        "can_add_user": bool(request.form.get("can_add_user")),
-        "can_manage_users": bool(request.form.get("can_manage_users")),
-        "can_view_users_and_logs": bool(request.form.get("can_view_users_and_logs"))
-    }
-    role = request.form.get("role", "subadmin")
+    role = request.form.get("role", "superadmin")
+    if role != "superadmin":
+        flash("Only superadmin accounts are supported. Use employee SubAdmin privileges instead.", "error")
+        return redirect(url_for("view_admins"))
     
-    update_admin_permissions(username, role, perms)
-    flash(f"Permissions updated for {username}.", "success")
+    update_admin_permissions(username, "superadmin", {})
+    flash(f"Admin {username} updated.", "success")
     return redirect(url_for("view_admins"))
 
 @app.route("/admin/admins/<username>/token", methods=["POST"])
@@ -694,6 +842,18 @@ def generate_ssh_key():
     )
 
 
+@app.route("/employee/api-token/generate", methods=["POST"])
+@employee_login_required
+def generate_employee_api_token_route():
+    username = session["employee_username"]
+    if not _has_permission("can_fetch_credentials"):
+        flash("You do not have permission to generate an API token.", "error")
+        return redirect(url_for("employee_dashboard"))
+    generate_employee_api_token(username)
+    flash("New API token generated.", "success")
+    return redirect(url_for("employee_dashboard"))
+
+
 # Script API for Credentials
 @app.route("/api/v1/users/<username>/credentials", methods=["GET"])
 def api_get_credentials(username):
@@ -704,12 +864,16 @@ def api_get_credentials(username):
     
     token = auth_header.split(" ")[1]
     admin = get_admin_by_api_token(token)
+    employee = get_employee_by_api_token(token) if not admin else None
     
-    if not admin:
+    if admin:
+        if admin["role"] != "superadmin" and not admin["permissions"].get("can_fetch_credentials"):
+            return jsonify({"error": "Forbidden. Missing can_fetch_credentials permission."}), 403
+    elif employee:
+        if not employee["admin_permissions"].get("can_fetch_credentials"):
+            return jsonify({"error": "Forbidden. Missing can_fetch_credentials permission."}), 403
+    else:
         return jsonify({"error": "Forbidden"}), 403
-        
-    if admin["role"] != "superadmin" and not admin["permissions"].get("can_fetch_credentials"):
-        return jsonify({"error": "Forbidden. Missing can_fetch_credentials permission."}), 403
 
     if not user_exists(username):
         return jsonify({"error": "User not found"}), 404
@@ -753,7 +917,11 @@ def request_access():
 
     if verify_wfh_user(username, password, otp):
         session.pop("admin_username", None)
+        session.pop("admin_role", None)
+        session.pop("admin_permissions", None)
         session["employee_username"] = username
+        db_user = get_wfh_user(username) or {}
+        session["employee_permissions"] = db_user.get("admin_permissions") or {}
         access_result = _grant_employee_access(username)
         session["employee_access_result"] = access_result
         return redirect(url_for("employee_dashboard"))

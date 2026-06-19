@@ -1,0 +1,274 @@
+{% extends "admin_layout.html" %}
+{% block title %}AWS Region Management{% endblock %}
+{% block content %}
+
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .btn-black {
+        background-color: #111827;
+        color: #FFFFFF;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        display: inline-block;
+    }
+    
+    .btn-black:hover {
+        background-color: #000000;
+        color: #FFFFFF;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .region-card {
+        background: white; 
+        border: 1px solid var(--border); 
+        border-radius: 12px;
+        box-shadow: var(--shadow); 
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .form-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .form-text {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+
+    .custom-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        text-align: left; 
+    }
+    
+    .custom-table th { 
+        background: #F8FAFC; 
+        color: #64748B; 
+        font-size: 12px; 
+        font-weight: 600; 
+        text-transform: uppercase; 
+        padding: 12px 16px; 
+        border-bottom: 1px solid var(--border); 
+        border-top: 1px solid var(--border); 
+        white-space: nowrap;
+    }
+    
+    .custom-table td {
+        padding: 16px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+    }
+
+    .sg-tag {
+        background: #EFF6FF;
+        color: var(--primary);
+        border: 1px solid #BFDBFE;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        font-family: monospace;
+        display: inline-block;
+        margin: 2px 4px 2px 0;
+    }
+
+    .btn-outline { 
+        padding: 6px 16px; 
+        border: 1px solid var(--border); 
+        border-radius: 6px; 
+        background: white; 
+        color: var(--text-main); 
+        font-size: 13px; 
+        font-weight: 500; 
+        cursor: pointer; 
+        text-decoration: none; 
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .btn-outline:hover { background: #F1F5F9; }
+    
+    .btn-danger-outline { color: #DC2626; border-color: #FECACA; }
+    .btn-danger-outline:hover { background: #FEF2F2; color: #B91C1C; }
+
+    /* Modal styling */
+    .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 500px;
+        padding: 24px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" style="font-size: 24px; margin-bottom: 4px;">AWS Region Management</h1>
+        <p class="text-muted" style="margin: 0;">Manage global AWS regions and default security groups.</p>
+    </div>
+    <button class="btn-black" onclick="openAddModal()">+ Add New Region</button>
+</div>
+
+<div class="region-card">
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>AWS Region</th>
+                <th>Security Groups</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for region, cfg in regions.items() %}
+            <tr>
+                <td style="font-weight: 600;">{{ region }}</td>
+                <td>
+                    {% for sg in cfg.get('securityGrpIds', []) %}
+                        <span class="sg-tag">{{ sg }}</span>
+                    {% endfor %}
+                    {% if not cfg.get('securityGrpIds') %}
+                        <span class="text-muted small">No security groups defined.</span>
+                    {% endif %}
+                </td>
+                <td style="width: 180px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-outline" onclick="openEditModal('{{ region }}', '{{ cfg.get('securityGrpIds', []) | join(', ') }}')">Edit SGs</button>
+                        <form action="{{ url_for('delete_region', region=region) }}" method="POST" style="margin:0;" onsubmit="return confirm('Are you sure you want to delete region {{ region }}? This will remove it from the global defaults, but user overrides will not be affected.');">
+                            <button type="submit" class="btn-outline btn-danger-outline">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" class="text-center text-muted" style="padding: 32px;">No global regions configured.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Add Region Modal -->
+<div class="modal-overlay" id="addRegionModal">
+    <div class="modal-content">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0" style="font-weight: 600;">Add New Region</h5>
+            <button type="button" class="btn-close" onclick="closeModals()"></button>
+        </div>
+        <form action="{{ url_for('add_region') }}" method="POST">
+            <div class="form-group">
+                <label class="form-label">Region Name</label>
+                <input type="text" name="region" class="form-control" required placeholder="e.g. us-east-1" pattern="[a-zA-Z0-9-]+">
+                <div class="form-text">Standard AWS region identifier.</div>
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label">Security Group IDs</label>
+                <input type="text" name="sgs" class="form-control" required placeholder="sg-12345, sg-67890">
+                <div class="form-text">Comma-separated list of SG IDs.</div>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" onclick="closeModals()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Region</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Region Modal -->
+<div class="modal-overlay" id="editRegionModal">
+    <div class="modal-content">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0" style="font-weight: 600;">Edit Region SGs</h5>
+            <button type="button" class="btn-close" onclick="closeModals()"></button>
+        </div>
+        <form action="{{ url_for('update_region') }}" method="POST">
+            <input type="hidden" name="region" id="editRegionNameInput">
+            <div class="form-group mb-3">
+                <label class="form-label">Region</label>
+                <input type="text" class="form-control bg-light" id="editRegionNameDisplay" disabled>
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label">Security Group IDs</label>
+                <input type="text" name="sgs" id="editSgsInput" class="form-control" required placeholder="sg-12345, sg-67890">
+                <div class="form-text">Comma-separated list of SG IDs.</div>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" onclick="closeModals()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openAddModal() {
+        document.getElementById('addRegionModal').style.display = 'flex';
+    }
+
+    function openEditModal(region, sgs) {
+        document.getElementById('editRegionNameInput').value = region;
+        document.getElementById('editRegionNameDisplay').value = region;
+        document.getElementById('editSgsInput').value = sgs;
+        document.getElementById('editRegionModal').style.display = 'flex';
+    }
+
+    function closeModals() {
+        document.getElementById('addRegionModal').style.display = 'none';
+        document.getElementById('editRegionModal').style.display = 'none';
+    }
+
+    // Close on click outside
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal-overlay')) {
+            closeModals();
+        }
+    }
+</script>
+
+{% endblock %}

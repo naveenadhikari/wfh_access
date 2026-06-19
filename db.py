@@ -20,6 +20,8 @@ import json
 import os
 import secrets
 
+from permissions import parse_permissions
+
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "access.db")
 
 
@@ -137,6 +139,10 @@ def migrate_db():
         conn.execute("ALTER TABLE wfh_users ADD COLUMN ssh_public_key TEXT")
     if "ssh_key_updated_at" not in cols:
         conn.execute("ALTER TABLE wfh_users ADD COLUMN ssh_key_updated_at TEXT")
+    if "admin_permissions" not in cols:
+        conn.execute("ALTER TABLE wfh_users ADD COLUMN admin_permissions TEXT DEFAULT '{}'")
+    if "api_token" not in cols:
+        conn.execute("ALTER TABLE wfh_users ADD COLUMN api_token TEXT")
         
     admin_cols = {row[1] for row in conn.execute("PRAGMA table_info(admins)").fetchall()}
     if "role" not in admin_cols:
@@ -182,8 +188,39 @@ def migrate_db():
             
         # We don't drop the old column since SQLite alter table drop column is complex
     
+    # Migrate legacy subadmin accounts from admins table to employee privileges
+    _migrate_subadmins_to_employee_privileges(conn)
+
     conn.commit()
     conn.close()
+
+
+def _migrate_subadmins_to_employee_privileges(conn):
+    """Move subadmin role/permissions from admins into wfh_users.admin_permissions."""
+    subadmins = conn.execute(
+        "SELECT username, permissions, api_token FROM admins WHERE role = 'subadmin'"
+    ).fetchall()
+    for row in subadmins:
+        username = row["username"]
+        perms = parse_permissions(row["permissions"])
+        if not wfh_user_exists_in_conn(conn, username):
+            continue
+        conn.execute(
+            "UPDATE wfh_users SET admin_permissions = ? WHERE username = ?",
+            (json.dumps(perms), username),
+        )
+        if row["api_token"]:
+            conn.execute(
+                "UPDATE wfh_users SET api_token = ? WHERE username = ? AND (api_token IS NULL OR api_token = '')",
+                (row["api_token"], username),
+            )
+        conn.execute("DELETE FROM admins WHERE username = ?", (username,))
+
+
+def wfh_user_exists_in_conn(conn, username):
+    return conn.execute(
+        "SELECT 1 FROM wfh_users WHERE username = ?", (username,)
+    ).fetchone() is not None
 
 
 def add_audit_entry(admin_username, target_user, action, details=None):
@@ -353,6 +390,7 @@ def get_wfh_user(username):
 
     user = dict(row)
     user["ports_to_open"] = json.loads(user["ports_to_open"])
+    user["admin_permissions"] = parse_permissions(user.get("admin_permissions"))
     if overrides:
         user["region_overrides"] = {
             o["region"]: {
@@ -383,21 +421,23 @@ def wfh_user_exists(username):
 
 
 def add_wfh_user(username, password_hash, otp_seed, allow_log_access, allow_metrics_access,
-                  allow_hp_agent_access, ports_to_open, region_overrides=None):
+                  allow_hp_agent_access, ports_to_open, region_overrides=None,
+                  admin_permissions=None):
     """
     Insert a new WFH user (and optional per-region overrides).
     region_overrides: dict like { "ap-south-1": {"securityGrpIds": [...], "portsToOpen": [...]} }
     """
     conn = get_db()
+    perms_json = json.dumps(parse_permissions(admin_permissions or {}))
     conn.execute("""
         INSERT INTO wfh_users
             (username, password_hash, otp_seed, allow_log_access, allow_metrics_access,
-             allow_hp_agent_access, ports_to_open)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+             allow_hp_agent_access, ports_to_open, admin_permissions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         username, password_hash, otp_seed,
         int(allow_log_access), int(allow_metrics_access), int(allow_hp_agent_access),
-        json.dumps(ports_to_open)
+        json.dumps(ports_to_open), perms_json,
     ))
 
     if region_overrides:
@@ -409,19 +449,33 @@ def add_wfh_user(username, password_hash, otp_seed, allow_log_access, allow_metr
 
     conn.commit()
     conn.close()
-def update_wfh_user(username, allow_log_access, allow_metrics_access, allow_hp_agent_access, ports_to_open, region_overrides=None):
+def update_wfh_user(username, allow_log_access, allow_metrics_access, allow_hp_agent_access,
+                    ports_to_open, region_overrides=None, admin_permissions=None):
     """
     Update an existing WFH user's permissions and region overrides.
     """
     conn = get_db()
-    conn.execute("""
-        UPDATE wfh_users
-        SET allow_log_access = ?, allow_metrics_access = ?, allow_hp_agent_access = ?, ports_to_open = ?
-        WHERE username = ?
-    """, (
-        int(allow_log_access), int(allow_metrics_access), int(allow_hp_agent_access),
-        json.dumps(ports_to_open), username
-    ))
+    if admin_permissions is not None:
+        perms_json = json.dumps(parse_permissions(admin_permissions))
+        conn.execute("""
+            UPDATE wfh_users
+            SET allow_log_access = ?, allow_metrics_access = ?, allow_hp_agent_access = ?,
+                ports_to_open = ?, admin_permissions = ?
+            WHERE username = ?
+        """, (
+            int(allow_log_access), int(allow_metrics_access), int(allow_hp_agent_access),
+            json.dumps(ports_to_open), perms_json, username,
+        ))
+    else:
+        conn.execute("""
+            UPDATE wfh_users
+            SET allow_log_access = ?, allow_metrics_access = ?, allow_hp_agent_access = ?,
+                ports_to_open = ?
+            WHERE username = ?
+        """, (
+            int(allow_log_access), int(allow_metrics_access), int(allow_hp_agent_access),
+            json.dumps(ports_to_open), username,
+        ))
 
     if region_overrides is not None:
         # Clear existing overrides
@@ -480,6 +534,41 @@ def delete_user_ssh_key(username, key_id):
     )
     conn.commit()
     conn.close()
+
+
+def update_employee_permissions(username, permissions):
+    conn = get_db()
+    conn.execute(
+        "UPDATE wfh_users SET admin_permissions = ? WHERE username = ?",
+        (json.dumps(parse_permissions(permissions)), username),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_employee_by_api_token(token):
+    if not token:
+        return None
+    conn = get_db()
+    row = conn.execute(
+        "SELECT username, admin_permissions, api_token FROM wfh_users WHERE api_token = ?",
+        (token,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    user = dict(row)
+    user["admin_permissions"] = parse_permissions(user.get("admin_permissions"))
+    return user
+
+
+def generate_employee_api_token(username):
+    token = secrets.token_hex(32)
+    conn = get_db()
+    conn.execute("UPDATE wfh_users SET api_token = ? WHERE username = ?", (token, username))
+    conn.commit()
+    conn.close()
+    return token
 
 
 def get_all_ssh_key_status():

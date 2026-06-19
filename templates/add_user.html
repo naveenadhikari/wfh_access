@@ -200,8 +200,10 @@
             </div>
         </div>
 
+
+
         <!-- Section 2: Access Permissions -->
-        <h3 class="section-title mt-4">2. Access Permissions</h3>
+        <h3 class="section-title mt-4">Access Permissions (WFH)</h3>
         <div class="form-group p-3 bg-light border rounded">
             <div class="custom-switch">
                 <label class="switch">
@@ -245,6 +247,8 @@
         </div>
         
         <button type="button" class="btn-add-outline" onclick="addOverrideRow()">+ Add Region Override</button>
+
+        {% include "_subadmin_permissions.html" %}
 
         <div class="actions-bar">
             <button type="submit" class="btn-black">Create User</button>

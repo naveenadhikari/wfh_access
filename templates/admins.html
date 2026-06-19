@@ -3,31 +3,25 @@
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3">Manage Admins</h1>
-</div>
-
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    <div class="mb-4">
-    {% for category, message in messages %}
-      <div class="alert alert-{% if category == 'error' %}danger{% else %}success{% endif %}">{{ message }}</div>
-    {% endfor %}
+    <div>
+        <h1 class="h3">Manage Admins</h1>
+        <p class="text-muted mb-0" style="font-size: 14px;">
+            Superadmin accounts only. To grant management access to employees, edit their
+            <strong>SubAdmin Privileges</strong> on the user edit page.
+        </p>
     </div>
-  {% endif %}
-{% endwith %}
+</div>
 
 <!-- List Admins -->
 <div class="card mb-4">
     <div class="card-header bg-light">
-        <strong>Existing Admins</strong>
+        <strong>Superadmin Accounts</strong>
     </div>
     <div class="card-body p-0">
         <table class="table mb-0" style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0;">
                     <th style="padding: 12px; font-size: 13px; color: #64748B;">Username</th>
-                    <th style="padding: 12px; font-size: 13px; color: #64748B;">Role</th>
-                    <th style="padding: 12px; font-size: 13px; color: #64748B;">Permissions</th>
                     <th style="padding: 12px; font-size: 13px; color: #64748B;">API Token</th>
                     <th style="padding: 12px; font-size: 13px; color: #64748B;">Actions</th>
                 </tr>
@@ -35,23 +29,9 @@
             <tbody>
                 {% for admin in admins %}
                 <tr style="border-bottom: 1px solid #E2E8F0;">
-                    <td style="padding: 12px; font-weight: 500;">{{ admin.username }}</td>
-                    <td style="padding: 12px;">
-                        {% if admin.role == 'superadmin' %}
-                            <span style="background: #FEF3C7; color: #92400E; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Superadmin</span>
-                        {% else %}
-                            <span style="background: #E0E7FF; color: #3730A3; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Sub-admin</span>
-                        {% endif %}
-                    </td>
-                    <td style="padding: 12px; font-size: 13px;">
-                        {% if admin.role == 'superadmin' %}
-                            All Permissions
-                        {% else %}
-                            {% if admin.permissions.get('can_fetch_credentials') %} Fetch Credentials, {% endif %}
-                            {% if admin.permissions.get('can_add_user') %} Add Users, {% endif %}
-                            {% if admin.permissions.get('can_manage_users') %} Manage Users, {% endif %}
-                            {% if admin.permissions.get('can_view_users_and_logs') %} View Users & Logs {% endif %}
-                        {% endif %}
+                    <td style="padding: 12px; font-weight: 500;">
+                        {{ admin.username }}
+                        <span style="background: #FEF3C7; color: #92400E; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">Superadmin</span>
                     </td>
                     <td style="padding: 12px;">
                         {% if admin.api_token %}
@@ -60,7 +40,6 @@
                         {% else %}
                             <span class="text-muted" style="font-size: 12px;">None</span>
                         {% endif %}
-                        
                         <form action="{{ url_for('generate_admin_token', username=admin.username) }}" method="POST" style="display: inline;">
                             <button type="submit" style="font-size: 11px; padding: 2px 6px; background: #E2E8F0; border: none; border-radius: 4px; cursor: pointer;">Generate</button>
                         </form>
@@ -79,11 +58,11 @@
     </div>
 </div>
 
-<!-- Add/Edit Admin -->
+<!-- Add Admin -->
 <div class="row">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header bg-light"><strong>Add New Admin</strong></div>
+            <div class="card-header bg-light"><strong>Add Superadmin</strong></div>
             <div class="card-body">
                 <form action="{{ url_for('add_admin_route') }}" method="POST">
                     <div class="mb-3">
@@ -94,52 +73,7 @@
                         <label>Password</label>
                         <input type="password" name="password" class="form-control" required>
                     </div>
-                    <div class="mb-3">
-                        <label>Permissions (For Sub-admins)</label>
-                        <div>
-                            <label><input type="checkbox" name="can_fetch_credentials" value="1"> Fetch OTP/SSH via API & Dashboard</label><br>
-                            <label><input type="checkbox" name="can_add_user" value="1"> Add New Users</label><br>
-                            <label><input type="checkbox" name="can_manage_users" value="1"> Manage Users (Add/Edit/Delete)</label><br>
-                            <label><input type="checkbox" name="can_view_users_and_logs" value="1"> View User List & Audit Logs</label>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Create Admin</button>
-                </form>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-light"><strong>Update Admin Permissions</strong></div>
-            <div class="card-body">
-                <form action="" method="POST" id="update-admin-form">
-                    <div class="mb-3">
-                        <label>Select Admin</label>
-                        <select class="form-control" onchange="document.getElementById('update-admin-form').action = '/admin/admins/' + this.value + '/update';">
-                            <option value="">-- Select --</option>
-                            {% for admin in admins %}
-                            <option value="{{ admin.username }}">{{ admin.username }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label>Role</label>
-                        <select name="role" class="form-control">
-                            <option value="subadmin">Sub-admin</option>
-                            <option value="superadmin">Superadmin</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label>Permissions</label>
-                        <div>
-                            <label><input type="checkbox" name="can_fetch_credentials" value="1"> Fetch OTP/SSH via API & Dashboard</label><br>
-                            <label><input type="checkbox" name="can_add_user" value="1"> Add New Users</label><br>
-                            <label><input type="checkbox" name="can_manage_users" value="1"> Manage Users (Add/Edit/Delete)</label><br>
-                            <label><input type="checkbox" name="can_view_users_and_logs" value="1"> View User List & Audit Logs</label>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Update</button>
+                    <button type="submit" class="btn btn-primary">Create Superadmin</button>
                 </form>
             </div>
         </div>
