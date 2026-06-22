@@ -47,7 +47,7 @@
         height: 24px;
     }
 
-    .switch input { 
+    .switch input {
         opacity: 0;
         width: 0;
         height: 0;
@@ -75,14 +75,14 @@
         background-color: white;
         transition: .3s;
         border-radius: 50%;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
 
-    input:checked + .slider {
+    input:checked+.slider {
         background-color: var(--primary);
     }
 
-    input:checked + .slider:before {
+    input:checked+.slider:before {
         transform: translateX(20px);
     }
 
@@ -163,7 +163,7 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         cursor: pointer;
     }
-    
+
     .btn-black:hover {
         background-color: #000000;
         color: #FFFFFF;
@@ -185,7 +185,8 @@
         <div class="row form-group">
             <div class="col-md-6">
                 <label class="form-label">Username</label>
-                <input type="text" name="username" class="form-control" required pattern="[a-zA-Z0-9._-]+" placeholder="e.g. john.doe">
+                <input type="text" name="username" class="form-control" required pattern="[a-zA-Z0-9._-]+"
+                    placeholder="e.g. john.doe">
                 <div class="form-text">Letters, numbers, dots, underscores, hyphens only.</div>
             </div>
             <div class="col-md-6">
@@ -232,20 +233,24 @@
         <h3 class="section-title mt-4">3. Network Configuration</h3>
         <div class="form-group">
             <label class="form-label">Global Ports to Open</label>
-            <input type="text" name="ports_to_open" id="portsToOpen" class="form-control" value="22" placeholder="e.g. 22, 3306">
+            <input type="text" name="ports_to_open" id="portsToOpen" class="form-control" value="22"
+                placeholder="e.g. 22, 3306">
             <div class="form-text">Leave empty to skip opening security-group ports for default regions.</div>
         </div>
+
+     
 
         <!-- Section 4: Region Overrides -->
         <h3 class="section-title mt-4">4. Region Overrides</h3>
         <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">
-            If you specify overrides below, the user will <strong>ONLY</strong> have access to these specific regions and security groups, ignoring global ports completely.
+            If you specify overrides below, the user will <strong>ONLY</strong> have access to these specific regions
+            and security groups, ignoring global ports completely.
         </p>
-        
+
         <div id="regionOverridesContainer">
             <!-- Dynamic rows will be added here -->
         </div>
-        
+
         <button type="button" class="btn-add-outline" onclick="addOverrideRow()">+ Add Region Override</button>
 
         {% include "_subadmin_permissions.html" %}
@@ -257,20 +262,20 @@
 </div>
 
 <script>
-const globalRegions = {{ global_regions | tojson | safe }};
+    const globalRegions = {{ global_regions | tojson | safe }};
 
-function addOverrideRow(region = '', sgs = '', ports = '') {
-    const container = document.getElementById('regionOverridesContainer');
-    const row = document.createElement('div');
-    row.className = 'override-row';
-    
-    let optionsHtml = '<option value="">-- Select Region --</option>';
-    for (const [rName, rData] of Object.entries(globalRegions)) {
-        const selected = (rName === region) ? 'selected' : '';
-        optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
-    }
-    
-    row.innerHTML = `
+    function addOverrideRow(region = '', sgs = '', ports = '') {
+        const container = document.getElementById('regionOverridesContainer');
+        const row = document.createElement('div');
+        row.className = 'override-row';
+
+        let optionsHtml = '<option value="">-- Select Region --</option>';
+        for (const [rName, rData] of Object.entries(globalRegions)) {
+            const selected = (rName === region) ? 'selected' : '';
+            optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
+        }
+
+        row.innerHTML = `
         <div class="override-col" style="flex: 0.8">
             <label class="form-label" style="font-size: 11px;">Region Name</label>
             <select name="override_region[]" class="form-select region-select" onchange="updateSgs(this)" required>
@@ -289,33 +294,33 @@ function addOverrideRow(region = '', sgs = '', ports = '') {
             <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()">Remove</button>
         </div>
     `;
-    container.appendChild(row);
-}
-
-function updateSgs(selectElement) {
-    const region = selectElement.value;
-    const row = selectElement.closest('.override-row');
-    const sgInput = row.querySelector('.sg-input');
-    
-    if (region && globalRegions[region]) {
-        const sgs = globalRegions[region].securityGrpIds || [];
-        sgInput.value = sgs.join(', ');
-    } else {
-        sgInput.value = '';
+        container.appendChild(row);
     }
-}
+
+    function updateSgs(selectElement) {
+        const region = selectElement.value;
+        const row = selectElement.closest('.override-row');
+        const sgInput = row.querySelector('.sg-input');
+
+        if (region && globalRegions[region]) {
+            const sgs = globalRegions[region].securityGrpIds || [];
+            sgInput.value = sgs.join(', ');
+        } else {
+            sgInput.value = '';
+        }
+    }
 </script>
 
 <script>
-const templates = {{ role_templates_json | safe }};
-document.getElementById('roleSelect').addEventListener('change', function() {
-    const t = templates[this.value];
-    if (!t) return; // "Custom" selected, leave as-is
-    document.getElementById('allowLog').checked = !!t.allow_log_access;
-    document.getElementById('allowMetrics').checked = !!t.allow_metrics_access;
-    document.getElementById('allowHpAgent').checked = !!t.allow_hp_agent_access;
-    document.getElementById('portsToOpen').value = t.ports_to_open.join(',');
-});
+    const templates = {{ role_templates_json | safe }};
+    document.getElementById('roleSelect').addEventListener('change', function () {
+        const t = templates[this.value];
+        if (!t) return; // "Custom" selected, leave as-is
+        document.getElementById('allowLog').checked = !!t.allow_log_access;
+        document.getElementById('allowMetrics').checked = !!t.allow_metrics_access;
+        document.getElementById('allowHpAgent').checked = !!t.allow_hp_agent_access;
+        document.getElementById('portsToOpen').value = t.ports_to_open.join(',');
+    });
 </script>
 
 {% endblock %}

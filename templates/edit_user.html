@@ -2,92 +2,99 @@
 {% block title %}Edit User{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="page-title" style="font-size:24px;">Edit User: {{ username }}</h1>
+  <h1 class="page-title" style="font-size:24px;">Edit User: {{ username }}</h1>
 </div>
 <div class="card-custom">
 
-<form method="POST">
-  <div class="mb-3 border-top pt-3">
-    <label class="form-label">Access permissions</label>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="allow_log_access" id="allowLog"
-             {{ 'checked' if user.get('allowLogAccess') }}>
-      <label class="form-check-label" for="allowLog">Log access</label>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="allow_metrics_access" id="allowMetrics"
-             {{ 'checked' if user.get('allowServerMetricsAccess') }}>
-      <label class="form-check-label" for="allowMetrics">Server metrics access</label>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="allow_hp_agent_access" id="allowHpAgent"
-             {{ 'checked' if user.get('allowHpAgentAccess') }}>
-      <label class="form-check-label" for="allowHpAgent">HP Agent access</label>
-    </div>
-  </div>
-
-  <div class="mb-3">
-    <label class="form-label">Ports to open (comma-separated)</label>
-    <input type="text" name="ports_to_open" class="form-control"
-           value="{{ user.get('portsToOpen', []) | join(', ') }}">
-  </div>
-
-  <div class="mb-4 mt-4 border-top pt-3">
-    <h5>Custom Region & Security Group Overrides</h5>
-    <p class="text-muted small">By default, ports are opened across all globally configured regions and security groups. If you specify overrides below, the user will ONLY have access to these specific regions and security groups.</p>
-    
-    <div id="regionOverridesContainer">
-      {% set overrides = user.get('overRiddenRegionAndCfg', {}) %}
-      {% for region, cfg in overrides.items() %}
-      <div class="row mb-3 align-items-end border p-2 rounded bg-light override-row">
-        <div class="col-md-3">
-            <label class="form-label small">Region Name</label>
-            <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)" required>
-                <option value="">-- Select Region --</option>
-                {% for rName in global_regions.keys() %}
-                <option value="{{ rName }}" {% if rName == region %}selected{% endif %}>{{ rName }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label small">Security Group IDs (comma-separated)</label>
-            <input type="text" name="override_sgs[]" class="form-control form-control-sm sg-input" value="{{ cfg.securityGrpIds | join(', ') }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label small">Ports to Open</label>
-            <input type="text" name="override_ports[]" class="form-control form-control-sm" value="{{ cfg.portsToOpen | join(', ') }}">
-        </div>
-        <div class="col-md-2">
-            <button type="button" class="btn btn-danger btn-sm w-100" onclick="this.parentElement.parentElement.remove()">Remove</button>
-        </div>
+  <form method="POST">
+    <div class="mb-3 border-top pt-3">
+      <label class="form-label">Access permissions</label>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="allow_log_access" id="allowLog" {{ 'checked' if
+          user.get('allowLogAccess') }}>
+        <label class="form-check-label" for="allowLog">Log access</label>
       </div>
-      {% endfor %}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="allow_metrics_access" id="allowMetrics" {{ 'checked' if
+          user.get('allowServerMetricsAccess') }}>
+        <label class="form-check-label" for="allowMetrics">Server metrics access</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="allow_hp_agent_access" id="allowHpAgent" {{ 'checked' if
+          user.get('allowHpAgentAccess') }}>
+        <label class="form-check-label" for="allowHpAgent">HP Agent access</label>
+      </div>
     </div>
-    
-    <button type="button" class="btn btn-outline-secondary btn-sm mb-3" onclick="addOverrideRow()">+ Add Region Override</button>
-  </div>
 
-  {% include "_subadmin_permissions.html" %}
+    <div class="mb-3">
+      <label class="form-label">Ports to open (comma-separated)</label>
+      <input type="text" name="ports_to_open" class="form-control"
+        value="{{ user.get('portsToOpen', []) | join(', ') }}">
+    </div>
 
-  <button type="submit" class="btn btn-primary">Save Changes</button>
-  <a href="{{ url_for('view_users') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
-</form>
+    <div class="mb-4 mt-4 border-top pt-3">
+      <h5>Custom Region & Security Group Overrides</h5>
+      <p class="text-muted small">By default, ports are opened across all globally configured regions and security
+        groups. If you specify overrides below, the user will ONLY have access to these specific regions and security
+        groups.</p>
 
-<script>
-const globalRegions = {{ global_regions | tojson | safe }};
+      <div id="regionOverridesContainer">
+        {% set overrides = user.get('overRiddenRegionAndCfg', {}) %}
+        {% for region, cfg in overrides.items() %}
+        <div class="row mb-3 align-items-end border p-2 rounded bg-light override-row">
+          <div class="col-md-3">
+            <label class="form-label small">Region Name</label>
+            <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)"
+              required>
+              <option value="">-- Select Region --</option>
+              {% for rName in global_regions.keys() %}
+              <option value="{{ rName }}" {% if rName==region %}selected{% endif %}>{{ rName }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Security Group IDs (comma-separated)</label>
+            <input type="text" name="override_sgs[]" class="form-control form-control-sm sg-input"
+              value="{{ cfg.securityGrpIds | join(', ') }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Ports to Open</label>
+            <input type="text" name="override_ports[]" class="form-control form-control-sm"
+              value="{{ cfg.portsToOpen | join(', ') }}">
+          </div>
+          <div class="col-md-2">
+            <button type="button" class="btn btn-danger btn-sm w-100"
+              onclick="this.parentElement.parentElement.remove()">Remove</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
 
-function addOverrideRow(region = '', sgs = '', ports = '') {
-    const container = document.getElementById('regionOverridesContainer');
-    const row = document.createElement('div');
-    row.className = 'row mb-3 align-items-end border p-2 rounded bg-light override-row';
-    
-    let optionsHtml = '<option value="">-- Select Region --</option>';
-    for (const [rName, rData] of Object.entries(globalRegions)) {
+      <button type="button" class="btn btn-outline-secondary btn-sm mb-3" onclick="addOverrideRow()">+ Add Region
+        Override</button>
+    </div>
+
+    {% include "_subadmin_permissions.html" %}
+
+    <button type="submit" class="btn btn-primary">Save Changes</button>
+    <a href="{{ url_for('view_users') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+  </form>
+
+  <script>
+    const globalRegions = {{ global_regions | tojson | safe }};
+
+    function addOverrideRow(region = '', sgs = '', ports = '') {
+      const container = document.getElementById('regionOverridesContainer');
+      const row = document.createElement('div');
+      row.className = 'row mb-3 align-items-end border p-2 rounded bg-light override-row';
+
+      let optionsHtml = '<option value="">-- Select Region --</option>';
+      for (const [rName, rData] of Object.entries(globalRegions)) {
         const selected = (rName === region) ? 'selected' : '';
         optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
-    }
+      }
 
-    row.innerHTML = `
+      row.innerHTML = `
         <div class="col-md-3">
             <label class="form-label small">Region Name</label>
             <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)" required>
@@ -106,21 +113,21 @@ function addOverrideRow(region = '', sgs = '', ports = '') {
             <button type="button" class="btn btn-danger btn-sm w-100" onclick="this.parentElement.parentElement.remove()">Remove</button>
         </div>
     `;
-    container.appendChild(row);
-}
+      container.appendChild(row);
+    }
 
-function updateSgs(selectElement) {
-    const region = selectElement.value;
-    const row = selectElement.closest('.override-row');
-    const sgInput = row.querySelector('.sg-input');
-    
-    if (region && globalRegions[region]) {
+    function updateSgs(selectElement) {
+      const region = selectElement.value;
+      const row = selectElement.closest('.override-row');
+      const sgInput = row.querySelector('.sg-input');
+
+      if (region && globalRegions[region]) {
         const sgs = globalRegions[region].securityGrpIds || [];
         sgInput.value = sgs.join(', ');
-    } else {
+      } else {
         sgInput.value = '';
+      }
     }
-}
-</script>
+  </script>
 </div>
 {% endblock %}

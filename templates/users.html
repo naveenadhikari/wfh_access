@@ -317,9 +317,16 @@
                             <div class="user-avatar">{{ username[0]|upper }}</div>
                             <div>
                                 <div class="user-name">{{ username }}</div>
-                                {% if u.get('adminPermissions') %}
-                                <span class="tag tag-blue" style="margin-top: 4px; font-size: 11px;">SubAdmin</span>
-                                {% endif %}
+ {% if u.get('is_subadmin') %}
+<h4 style="margin-top: 16px;">SubAdmin Privileges</h4>
+<div class="access-tags">
+    {% for key, label in PERMISSION_DEFINITIONS %}
+    {% if u.get('admin_permissions', {}).get(key) %}
+    <span class="tag tag-blue">{{ label }}</span>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
                             </div>
                         </div>
                     </td>
@@ -385,16 +392,17 @@
                                 </div>
                                 {% endif %}
 
-                                {% if u.get('adminPermissions') %}
-                                <h4 style="margin-top: 16px;">SubAdmin Privileges</h4>
-                                <div class="access-tags">
-                                    {% for key, label in PERMISSION_DEFINITIONS %}
-                                    {% if u.adminPermissions.get(key) %}
-                                    <span class="tag tag-blue">{{ label }}</span>
-                                    {% endif %}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
+                             
+    {% if u.get('admin_permissions') and u.get('admin_permissions').values() | list | reject('equalto', false) | list | length > 0 %}
+<h4 style="margin-top: 16px;">SubAdmin Privileges</h4>
+<div class="access-tags">
+    {% for key, label in PERMISSION_DEFINITIONS %}
+    {% if u.get('admin_permissions', {}).get(key) %}
+    <span class="tag tag-blue">{{ label }}</span>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
                             </div>
 
                             <!-- Network Overrides Column -->

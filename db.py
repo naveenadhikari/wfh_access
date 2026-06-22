@@ -60,6 +60,7 @@ def init_db():
             target_user TEXT NOT NULL,
             action TEXT NOT NULL,
             details TEXT,
+            ip_address TEXT,
             timestamp TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -144,6 +145,10 @@ def migrate_db():
     if "api_token" not in cols:
         conn.execute("ALTER TABLE wfh_users ADD COLUMN api_token TEXT")
         
+    audit_cols = {row[1] for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
+    if "ip_address" not in audit_cols:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN ip_address TEXT")
+
     admin_cols = {row[1] for row in conn.execute("PRAGMA table_info(admins)").fetchall()}
     if "role" not in admin_cols:
         conn.execute("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'superadmin'")
@@ -223,7 +228,7 @@ def wfh_user_exists_in_conn(conn, username):
     ).fetchone() is not None
 
 
-def add_audit_entry(admin_username, target_user, action, details=None):
+def add_audit_entry(admin_username, target_user, action, details=None, ip_address=None):
     """
     Insert one row into audit_log.
     `details` can be any JSON-serializable dict; we store it as a JSON string.
@@ -231,12 +236,21 @@ def add_audit_entry(admin_username, target_user, action, details=None):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO audit_log (admin_username, target_user, action, details) VALUES (?, ?, ?, ?)",
-        (admin_username, target_user, action, json.dumps(details or {}))
+        "INSERT INTO audit_log (admin_username, target_user, action, details, ip_address) VALUES (?, ?, ?, ?, ?)",
+        (admin_username, target_user, action, json.dumps(details or {}), ip_address)
     )
     conn.commit()
     conn.close()
 
+
+def delete_old_audit_logs(days):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM audit_log WHERE timestamp < datetime('now', ?)", (f'-{days} days',))
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
 
 def get_recent_audit_entries(limit=20):
     conn = get_db()
@@ -390,7 +404,9 @@ def get_wfh_user(username):
 
     user = dict(row)
     user["ports_to_open"] = json.loads(user["ports_to_open"])
-    user["admin_permissions"] = parse_permissions(user.get("admin_permissions"))
+    raw_perms = parse_permissions(user.get("admin_permissions"))
+    user["admin_permissions"] = raw_perms
+    user["is_subadmin"] = any(raw_perms.values()) if raw_perms else False
     if overrides:
         user["region_overrides"] = {
             o["region"]: {

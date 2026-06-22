@@ -31,23 +31,31 @@
                 <tr style="border-bottom: 1px solid #E2E8F0;">
                     <td style="padding: 12px; font-weight: 500;">
                         {{ admin.username }}
-                        <span style="background: #FEF3C7; color: #92400E; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">Superadmin</span>
+                        <span
+                            style="background: #FEF3C7; color: #92400E; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">Superadmin</span>
                     </td>
                     <td style="padding: 12px;">
                         {% if admin.api_token %}
-                            <code style="font-size: 12px; background: #F1F5F9; padding: 4px; border-radius: 4px;">{{ admin.api_token[:10] }}...</code>
-                            <button onclick="navigator.clipboard.writeText('{{ admin.api_token }}'); alert('Token copied!');" style="font-size: 11px; padding: 2px 6px; margin-left: 4px;">Copy</button>
+                        <code
+                            style="font-size: 12px; background: #F1F5F9; padding: 4px; border-radius: 4px;">{{ admin.api_token[:10] }}...</code>
+                        <button
+                            onclick="navigator.clipboard.writeText('{{ admin.api_token }}'); alert('Token copied!');"
+                            style="font-size: 11px; padding: 2px 6px; margin-left: 4px;">Copy</button>
                         {% else %}
-                            <span class="text-muted" style="font-size: 12px;">None</span>
+                        <span class="text-muted" style="font-size: 12px;">None</span>
                         {% endif %}
-                        <form action="{{ url_for('generate_admin_token', username=admin.username) }}" method="POST" style="display: inline;">
-                            <button type="submit" style="font-size: 11px; padding: 2px 6px; background: #E2E8F0; border: none; border-radius: 4px; cursor: pointer;">Generate</button>
+                        <form action="{{ url_for('generate_admin_token', username=admin.username) }}" method="POST"
+                            style="display: inline;">
+                            <button type="submit"
+                                style="font-size: 11px; padding: 2px 6px; background: #E2E8F0; border: none; border-radius: 4px; cursor: pointer;">Generate</button>
                         </form>
                     </td>
                     <td style="padding: 12px;">
                         {% if admin.username != session['admin_username'] %}
-                        <form action="{{ url_for('delete_admin_route', username=admin.username) }}" method="POST" onsubmit="return confirm('Delete this admin?');" style="display:inline;">
-                            <button type="submit" style="font-size: 12px; color: #DC2626; background: none; border: none; cursor: pointer; text-decoration: underline;">Delete</button>
+                        <form action="{{ url_for('delete_admin_route', username=admin.username) }}" method="POST"
+                            onsubmit="return confirm('Delete this admin?');" style="display:inline;">
+                            <button type="submit"
+                                style="font-size: 12px; color: #DC2626; background: none; border: none; cursor: pointer; text-decoration: underline;">Delete</button>
                         </form>
                         {% endif %}
                     </td>

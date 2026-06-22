@@ -53,6 +53,10 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 migrate_db()
 
 
+
+
+
+#>>>>>>>
 @app.context_processor
 def inject_permission_helpers():
     return {
@@ -237,6 +241,15 @@ def login():
             access_result = _grant_employee_access(employee_username)
             flash("Logged in successfully. WFH access has been opened for your IP.", "success")
             session["employee_access_result"] = access_result
+            
+            add_audit_entry(
+                admin_username="SYSTEM",
+                target_user=employee_username,
+                action="login",
+                details={"message": "User logged in and granted access"},
+                ip_address=_client_ip()
+            )
+            
             return redirect(url_for("employee_dashboard"))
 
         flash("Invalid username, password, or OTP.", "error")
@@ -317,7 +330,8 @@ def add_region():
         admin_username=_current_actor(),
         target_user="SYSTEM",
         action="add_region",
-        details={"region": region, "securityGrpIds": sgs}
+        details={"region": region, "securityGrpIds": sgs},
+        ip_address=_client_ip()
     )
     
     flash(f"Region {region} added successfully.", "success")
@@ -347,7 +361,8 @@ def update_region():
         admin_username=_current_actor(),
         target_user="SYSTEM",
         action="update_region",
-        details={"region": region, "securityGrpIds": sgs}
+        details={"region": region, "securityGrpIds": sgs},
+        ip_address=_client_ip()
     )
     
     flash(f"Region {region} updated successfully.", "success")
@@ -365,8 +380,9 @@ def delete_region(region):
             admin_username=_current_actor(),
             target_user="SYSTEM",
             action="delete_region",
-            details={"region": region}
-        )
+            details={"region": region},
+        ip_address=_client_ip()
+    )
         flash(f"Region {region} deleted successfully.", "success")
     else:
         flash(f"Region {region} not found.", "error")
@@ -395,6 +411,8 @@ def add_user():
 
     if request.method == "POST":
         username = request.form.get("username", "").strip().lower()
+        """ Get the server2_username from the form """
+        server2_username = request.form.get("server2_username", "").strip() or None
         allow_log = bool(request.form.get("allow_log_access"))
         allow_metrics = bool(request.form.get("allow_metrics_access"))
         allow_hp_agent = bool(request.form.get("allow_hp_agent_access"))
@@ -474,7 +492,7 @@ def add_user():
 
             region_overrides[region] = {
                 "securityGrpIds": sgs,
-                "portsToOpen": ports
+                    "portsToOpen": ports
             }
 
         if region_overrides:
@@ -485,6 +503,8 @@ def add_user():
             user_entry["adminPermissions"] = admin_perms
 
         add_user_to_config(username, user_entry)
+
+      
 
         add_audit_entry(
             admin_username=_current_actor(),
@@ -520,7 +540,6 @@ def add_user():
         "add_user.html",
         **_add_user_form_context(role_templates, role_templates_json),
     )
-
 
 # Edit User
 @app.route("/admin/edit-user/<username>", methods=["GET", "POST"])
@@ -630,7 +649,8 @@ def delete_user(username):
         admin_username=_current_actor(),
         target_user=username,
         action="delete_user",
-        details={"message": "User deleted from database."}
+        details={"message": "User deleted from database."},
+        ip_address=_client_ip()
     )
 
     flash(f"User '{username}' deleted.", "success")
@@ -638,6 +658,24 @@ def delete_user(username):
 
 
 # Audit Log page
+
+@app.route("/admin/audit-log/delete", methods=["POST"])
+@require_any_permission("can_view_users_and_logs")
+def delete_audit_log_data():
+    days = request.form.get("days", type=int)
+    if days and days > 0:
+        from db import delete_old_audit_logs
+        deleted = delete_old_audit_logs(days)
+        add_audit_entry(
+            admin_username=_current_actor(),
+            target_user="SYSTEM",
+            action="delete_logs",
+            details={"message": f"Deleted {deleted} audit logs older than {days} days."},
+            ip_address=_client_ip()
+        )
+        flash(f"Deleted {deleted} audit logs older than {days} days.", "success")
+    return redirect(url_for("view_audit_log"))
+
 @app.route("/admin/audit-log")
 @require_any_permission("can_view_users_and_logs")
 def view_audit_log():
@@ -774,7 +812,8 @@ def employee_dashboard():
                 target_user=username,
                 action="upload_ssh_key",
                 details={"message": f"Employee uploaded SSH public key '{key_name}'."},
-            )
+        ip_address=_client_ip()
+    )
             flash("SSH public key saved successfully.", "success")
             return redirect(url_for("employee_dashboard"))
 
@@ -791,6 +830,7 @@ def delete_ssh_key(key_id):
         target_user=username,
         action="delete_ssh_key",
         details={"message": f"Employee deleted SSH key ID {key_id}."},
+        ip_address=_client_ip()
     )
     flash("SSH public key deleted successfully.", "success")
     return redirect(url_for("employee_dashboard"))
@@ -827,6 +867,7 @@ def generate_ssh_key():
         target_user=username,
         action="generate_ssh_key",
         details={"message": f"Employee generated a new SSH key pair '{key_name}'."},
+        ip_address=_client_ip()
     )
     
     # Send private key as file download
@@ -957,6 +998,14 @@ def allow_access():
         if cfg["ALLOWED_USR_IDENTITIES"][emp_name]["password"] == passw:
             if verify_otp_with_seed(user_sent_otp, cfg["ALLOWED_USR_IDENTITIES"][emp_name]["otpSeed"]):
                 status = grant_authorized_access(emp_name, ip_to_allow)
+                if status:
+                    add_audit_entry(
+                        admin_username="SYSTEM",
+                        target_user=emp_name,
+                        action="api_login",
+                        details={"message": "User requested access via API/curl"},
+                        ip_address=ip_to_allow
+                    )
             else:
                 logger.error("Invalid OTP")
         else:

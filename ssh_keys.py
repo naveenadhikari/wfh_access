@@ -1,6 +1,4 @@
 """
-ssh_keys.py
------------
 Validation helpers for employee-uploaded SSH public keys.
 """
 

@@ -7,6 +7,18 @@
         <h1 class="page-title" style="font-size:24px;">Audit Log</h1>
         <p class="welcome-msg" style="margin-bottom:0;">View recent administrative actions.</p>
     </div>
+    <div>
+        <form action="{{ url_for('delete_audit_log_data') }}" method="POST" class="d-flex align-items-center" onsubmit="return confirm('Are you sure you want to delete older audit logs?');">
+            <select name="days" class="custom-select" style="width: auto; margin-right: 10px; padding: 6px 12px; border-radius: 4px; border: 1px solid #CBD5E1;" required>
+                <option value="" disabled selected>Delete older than...</option>
+                <option value="1">1 Day</option>
+                <option value="7">7 Days</option>
+                <option value="15">15 Days</option>
+                <option value="30">30 Days</option>
+            </select>
+            <button type="submit" class="btn-custom" style="background-color: #ef4444; color: white;">Delete</button>
+        </form>
+    </div>
 </div>
 
 <div class="table-container">
@@ -15,10 +27,9 @@
             <thead>
                 <tr>
                     <th>Time</th>
-                    <th>Admin</th>
+                    <th>User / Admin</th>
                     <th>Target User</th>
-                    <th>Action</th>
-                    <th>Details</th>
+                    <th>Action / IP Address</th>
                 </tr>
             </thead>
             <tbody>
@@ -29,15 +40,18 @@
                     <td><strong>{{ e["target_user"] }}</strong></td>
                     <td>
                         <span class="badge-custom" style="background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1;">
-                            {{ e["action"] }}
+                            {% if e["action"] == "login" or e["action"] == "api_login" %}
+                                IP: {{ e["ip_address"] or "N/A" }}
+                            {% else %}
+                                {{ e["action"] }}
+                            {% endif %}
                         </span>
                     </td>
-                    <td><small><code style="background:#F8FAFC; padding:4px 6px; border-radius:4px; color:#4B5563;">{{ e["details"] }}</code></small></td>
                 </tr>
                 {% endfor %}
                 {% if not audit_entries %}
                 <tr>
-                    <td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);">
+                    <td colspan="4" style="text-align:center; padding:40px; color:var(--text-muted);">
                         No audit logs found.
                     </td>
                 </tr>

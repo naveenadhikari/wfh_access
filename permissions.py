@@ -1,10 +1,4 @@
-"""
-Role-based permission definitions for SubAdmin privileges on employees.
 
-Only two user types exist: Admin (superadmin in admins table) and Employee
-(wfh_users). SubAdmin is not a separate role — it is a set of optional
-privileges stored in wfh_users.admin_permissions.
-"""
 
 import json
 
