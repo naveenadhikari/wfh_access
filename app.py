@@ -52,7 +52,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 migrate_db()
 
+import requests
 
+SVRMETRICS_URL     = "http://localhost:6400"
+SVRMETRICS_API_KEY = "svrmetrics-api-key-change-this"
 
 
 
@@ -239,6 +242,21 @@ def login():
             db_user = get_wfh_user(employee_username) or {}
             session["employee_permissions"] = db_user.get("admin_permissions") or {}
             access_result = _grant_employee_access(employee_username)
+
+              # ── ──
+            employee_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+            try:
+                print(f"DEBUG — calling svrmetrics with IP: {employee_ip}")
+                requests.post(
+                    f"{SVRMETRICS_URL}/api/whitelist-ip",
+                    json={"ip": employee_ip, "emp_name": employee_username},
+                    headers={"X-API-Key": SVRMETRICS_API_KEY},
+                    timeout=5
+                )
+            except Exception:
+                pass
+            # ── END OF ADDITION ──
+
             flash("Logged in successfully. WFH access has been opened for your IP.", "success")
             session["employee_access_result"] = access_result
             
@@ -264,6 +282,19 @@ def admin_login_redirect():
 
 @app.route("/logout")
 def logout():
+     # ──  ──
+    emp_name = session.get("employee_username")
+    if emp_name:
+        try:
+            requests.post(
+                f"{SVRMETRICS_URL}/api/remove-ip",
+                json={"emp_name": emp_name},
+                headers={"X-API-Key": SVRMETRICS_API_KEY},
+                timeout=5
+            )
+        except Exception:
+            pass
+    # ── END OF ADDITION ──
     session.pop("admin_username", None)
     session.pop("admin_role", None)
     session.pop("admin_permissions", None)
