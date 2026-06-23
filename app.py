@@ -37,7 +37,7 @@ from db import (
     get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key,
     delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin,
     update_admin_permissions, generate_admin_api_token, get_admin_by_api_token, delete_admin,
-    get_global_setting, set_global_setting, get_wfh_user, get_employee_by_api_token,
+    get_global_setting, set_global_setting, get_wfh_user, get_employee_by_api_token, get_all_wfh_users,
     generate_employee_api_token, update_employee_permissions,
 )
 from config_writer import add_user_to_config, user_exists, list_users, get_access_cfg
@@ -65,6 +65,23 @@ def launch_svrmetrics():
     if not username:
         return redirect(url_for("login"))
 
+    # Step 1 — whitelist their IP first
+    user_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    try:
+        resp = requests.post(
+            f"{SVRMETRICS_URL}/api/whitelist-ip",
+            json={"ip": user_ip, "emp_name": username},
+            headers={"X-API-Key": SVRMETRICS_API_KEY},
+            timeout=5
+        )
+        if resp.status_code != 200:
+            flash("Could not grant access to monitoring server.", "error")
+            return redirect(url_for("dashboard"))
+    except Exception:
+        flash("Monitoring server is unreachable.", "error")
+        return redirect(url_for("dashboard"))
+
+    # Step 2 — generate token and redirect
     token = jwt.encode({
         "username": username,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
@@ -197,11 +214,12 @@ def _add_user_form_context(role_templates, role_templates_json):
 
 def _edit_user_form_context(username, user):
     db_user = get_wfh_user(username) or {}
+    perms = db_user.get("admin_permissions") or {}
     return {
         "username": username,
         "user": user,
         "global_regions": _get_global_regions(),
-        "admin_permissions": db_user.get("admin_permissions") or {},
+        "is_subadmin": any(perms.values()),
     }
 
 
@@ -237,7 +255,7 @@ def login():
             session.pop("employee_username", None)
             session.pop("employee_permissions", None)
             session["admin_username"] = username
-            
+
             admin_data = get_admin(username)
             if admin_data:
                 session["admin_role"] = admin_data["role"]
@@ -245,7 +263,28 @@ def login():
             else:
                 session["admin_role"] = "superadmin"
                 session["admin_permissions"] = {}
-                
+
+            # Add admin IP to svrmetrics whitelist
+            admin_ip = request.headers.get(
+                "X-Forwarded-For",
+                request.remote_addr
+            )
+
+            try:
+                requests.post(
+                    f"{SVRMETRICS_URL}/api/whitelist-ip",
+                    json={
+                        "ip": admin_ip,
+                        "emp_name": username
+                    },
+                    headers={
+                        "X-API-Key": SVRMETRICS_API_KEY
+                    },
+                    timeout=5
+                )
+            except Exception:
+                pass
+
             flash("Logged in successfully.", "success")
             return redirect(url_for("dashboard"))
 
@@ -253,36 +292,58 @@ def login():
             session.pop("admin_username", None)
             session.pop("admin_role", None)
             session.pop("admin_permissions", None)
+
             session["employee_username"] = employee_username
+
             db_user = get_wfh_user(employee_username) or {}
-            session["employee_permissions"] = db_user.get("admin_permissions") or {}
+            session["employee_permissions"] = (
+                db_user.get("admin_permissions") or {}
+            )
+
             access_result = _grant_employee_access(employee_username)
 
-              # ── ──
-            employee_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+            # Add employee IP to svrmetrics whitelist
+            employee_ip = request.headers.get(
+                "X-Forwarded-For",
+                request.remote_addr
+            )
+
             try:
-                print(f"DEBUG — calling svrmetrics with IP: {employee_ip}")
+                print(
+                    f"DEBUG — calling svrmetrics with IP: {employee_ip}"
+                )
+
                 requests.post(
                     f"{SVRMETRICS_URL}/api/whitelist-ip",
-                    json={"ip": employee_ip, "emp_name": employee_username},
-                    headers={"X-API-Key": SVRMETRICS_API_KEY},
+                    json={
+                        "ip": employee_ip,
+                        "emp_name": employee_username
+                    },
+                    headers={
+                        "X-API-Key": SVRMETRICS_API_KEY
+                    },
                     timeout=5
                 )
             except Exception:
                 pass
-            # ── END OF ADDITION ──
 
-            flash("Logged in successfully. WFH access has been opened for your IP.", "success")
+            flash(
+                "Logged in successfully. WFH access has been opened for your IP.",
+                "success"
+            )
+
             session["employee_access_result"] = access_result
-            
+
             add_audit_entry(
                 admin_username="SYSTEM",
                 target_user=employee_username,
                 action="login",
-                details={"message": "User logged in and granted access"},
+                details={
+                    "message": "User logged in and granted access"
+                },
                 ip_address=_client_ip()
             )
-            
+
             return redirect(url_for("employee_dashboard"))
 
         flash("Invalid username, password, or OTP.", "error")
@@ -298,7 +359,7 @@ def admin_login_redirect():
 @app.route("/logout")
 def logout():
      # ──  ──
-    emp_name = session.get("employee_username")
+    emp_name = session.get("employee_username") or session.get("admin_username")
     if emp_name:
         try:
             requests.post(
@@ -544,9 +605,10 @@ def add_user():
         if region_overrides:
             user_entry["overRiddenRegionAndCfg"] = region_overrides
 
-        admin_perms = permissions_from_form(request.form)
-        if has_subadmin_access(admin_perms):
-            user_entry["adminPermissions"] = admin_perms
+        if request.form.get("is_subadmin"):
+            user_entry["adminPermissions"] = {"can_fetch_credentials": True}
+        else:
+            user_entry["adminPermissions"] = {}
 
         add_user_to_config(username, user_entry)
 
@@ -653,8 +715,16 @@ def edit_user(username):
         }
         user_entry["overRiddenRegionAndCfg"] = region_overrides
 
-        admin_perms = permissions_from_form(request.form)
-        user_entry["adminPermissions"] = admin_perms
+        db_user = get_wfh_user(username) or {}
+        old_perms = db_user.get("admin_permissions") or {}
+        
+        if request.form.get("is_subadmin"):
+            if old_perms and any(old_perms.values()):
+                user_entry["adminPermissions"] = old_perms
+            else:
+                user_entry["adminPermissions"] = {"can_fetch_credentials": True}
+        else:
+            user_entry["adminPermissions"] = {}
 
         from config_writer import update_user_in_config
         update_user_in_config(username, user_entry)
@@ -744,80 +814,34 @@ def view_user_ssh_key(username):
     )
 
 
-# Admins Management
+# Subadmins Management
 @app.route("/admin/admins", methods=["GET"])
-@login_required
+@require_any_permission("can_manage_users", "can_view_users_and_logs")
 def view_admins():
-    if session.get("admin_role") != "superadmin":
-        flash("Only superadmins can manage admins.", "error")
-        return redirect(url_for("dashboard"))
-    admins = get_all_admins()
-    return render_template("admins.html", admins=admins)
+    all_users = get_all_wfh_users()
+    subadmins = {u: data for u, data in all_users.items() if data.get("is_subadmin")}
+    return render_template("admins.html", subadmins=subadmins, PERMISSION_DEFINITIONS=PERMISSION_DEFINITIONS)
 
-@app.route("/admin/admins/add", methods=["POST"])
-@login_required
-def add_admin_route():
-    if session.get("admin_role") != "superadmin":
-        return redirect(url_for("view_admins"))
+@app.route("/admin/admins/<username>/update-subadmin", methods=["POST"])
+@require_any_permission("can_manage_users")
+def update_subadmin_route(username):
+    perms = permissions_from_form(request.form)
     
-    username = request.form.get("username", "").strip()
-    password = request.form.get("password", "")
-    
-    if not username or not password:
-        flash("Username and password are required.", "error")
+    db_user = get_wfh_user(username)
+    if not db_user:
+        flash("User not found.", "error")
         return redirect(url_for("view_admins"))
         
-    perms = {
-        "can_fetch_credentials": bool(request.form.get("can_fetch_credentials")),
-        "can_add_user": bool(request.form.get("can_add_user")),
-        "can_manage_users": bool(request.form.get("can_manage_users")),
-        "can_view_users_and_logs": bool(request.form.get("can_view_users_and_logs"))
-    }
-    
-    from auth import seed_admin
-    otp_seed = seed_admin(username, password)
-    update_admin_permissions(username, "superadmin", {})
-    
-    qr_code_b64 = generate_qr_code_b64(otp_seed, username, issuer="Admin-Access")
-    return render_template("admin_created.html", username=username, password=password, otp_seed=otp_seed, qr_code_b64=qr_code_b64)
+    update_employee_permissions(username, perms)
 
-@app.route("/admin/admins/<username>/update", methods=["POST"])
-@login_required
-def update_admin_route(username):
-    if session.get("admin_role") != "superadmin":
-        return redirect(url_for("view_admins"))
-    
-    role = request.form.get("role", "superadmin")
-    if role != "superadmin":
-        flash("Only superadmin accounts are supported. Use employee SubAdmin privileges instead.", "error")
-        return redirect(url_for("view_admins"))
-    
-    update_admin_permissions(username, "superadmin", {})
-    flash(f"Admin {username} updated.", "success")
-    return redirect(url_for("view_admins"))
-
-@app.route("/admin/admins/<username>/token", methods=["POST"])
-@login_required
-def generate_admin_token(username):
-    if session.get("admin_role") != "superadmin":
-        return redirect(url_for("view_admins"))
-    
-    generate_admin_api_token(username)
-    flash(f"New API token generated for {username}.", "success")
-    return redirect(url_for("view_admins"))
-    
-@app.route("/admin/admins/<username>/delete", methods=["POST"])
-@login_required
-def delete_admin_route(username):
-    if session.get("admin_role") != "superadmin":
-        return redirect(url_for("view_admins"))
-    
-    if username == session.get("admin_username"):
-        flash("You cannot delete yourself.", "error")
-        return redirect(url_for("view_admins"))
-        
-    delete_admin(username)
-    flash(f"Admin {username} deleted.", "success")
+    add_audit_entry(
+        admin_username=_current_actor(),
+        target_user=username,
+        action="update_subadmin_privileges",
+        details={"permissions": perms},
+        ip_address=_client_ip()
+    )
+    flash(f"Subadmin privileges updated for {username}.", "success")
     return redirect(url_for("view_admins"))
 
 

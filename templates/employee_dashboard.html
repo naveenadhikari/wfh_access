@@ -8,436 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-color: #F8FAFC;
-            --card-bg: #FFFFFF;
-            --text-main: #0F172A;
-            --text-muted: #64748B;
-            --primary: #2563EB;
-            --primary-hover: #1D4ED8;
-            --success: #16A34A;
-            --border: #E2E8F0;
-            --radius: 12px;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 0;
-        }
-
-        /* Top Navigation */
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: var(--card-bg);
-            border-bottom: 1px solid var(--border);
-            padding: 16px 40px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        }
-
-        .nav-brand {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--text-main);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .nav-brand-icon {
-            background-color: var(--primary);
-            color: white;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-
-        .nav-user {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-
-        .user-info {
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-muted);
-        }
-
-        .user-info strong {
-            color: var(--text-main);
-            font-weight: 600;
-        }
-
-        .btn-logout {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-            padding: 6px 16px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            transition: all 0.2s;
-        }
-
-        .btn-logout:hover {
-            background-color: #F1F5F9;
-            color: var(--text-main);
-        }
-
-        /* Main Content Container */
-        .container {
-            max-width: 800px;
-            margin: 48px auto;
-            padding: 0 24px;
-        }
-
-        .flash-messages {
-            margin-bottom: 24px;
-        }
-
-        .alert {
-            padding: 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 12px;
-        }
-
-        .alert-success {
-            background-color: #DCFCE7;
-            color: #166534;
-            border: 1px solid #BBF7D0;
-        }
-
-        .alert-error {
-            background-color: #FEE2E2;
-            color: #991B1B;
-            border: 1px solid #FECACA;
-        }
-
-        /* Cards */
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            margin-bottom: 24px;
-            overflow: hidden;
-        }
-
-        .card-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--border);
-            background-color: #F8FAFC;
-        }
-
-        .card-header h3 {
-            margin: 0;
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-main);
-        }
-
-        .card-body {
-            padding: 24px;
-        }
-
-        /* Section 1: Access Status */
-        .status-banner {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            background-color: #F0FDF4;
-            border: 1px solid #BBF7D0;
-            padding: 16px;
-            border-radius: 8px;
-        }
-
-        .status-icon {
-            width: 12px;
-            height: 12px;
-            background-color: var(--success);
-            border-radius: 50%;
-            box-shadow: 0 0 0 4px #DCFCE7;
-        }
-
-        .status-text {
-            flex: 1;
-        }
-
-        .status-title {
-            font-weight: 600;
-            color: #166534;
-            font-size: 15px;
-            margin-bottom: 4px;
-        }
-
-        .status-ip {
-            font-size: 13px;
-            color: #15803D;
-        }
-
-        .access-log {
-            margin-top: 16px;
-            background-color: #1E293B;
-            color: #E2E8F0;
-            padding: 16px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 13px;
-            white-space: pre-wrap;
-            line-height: 1.5;
-        }
-
-        /* Section 2: Permissions */
-        .permission-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-        }
-
-        .permission-item {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .permission-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 6px 12px;
-            border-radius: 9999px;
-            font-size: 13px;
-            font-weight: 600;
-            width: fit-content;
-        }
-
-        .badge-enabled {
-            background-color: #DCFCE7;
-            color: #166534;
-        }
-
-        .badge-disabled {
-            background-color: #F1F5F9;
-            color: #64748B;
-        }
-
-        /* Section 3: SSH Key */
-        .ssh-status-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .ssh-status {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .ssh-meta {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 14px;
-            color: var(--text-main);
-            box-sizing: border-box;
-            resize: vertical;
-            min-height: 120px;
-            background-color: #F8FAFC;
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-            background-color: #FFFFFF;
-        }
-
-        .btn-primary {
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .btn-primary:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .btn-danger {
-            background-color: #EF4444;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .btn-danger:hover {
-            background-color: #DC2626;
-        }
-
-        .btn-secondary {
-            background-color: #F1F5F9;
-            color: #475569;
-            border: 1px solid #CBD5E1;
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .btn-secondary:hover {
-            background-color: #E2E8F0;
-        }
-
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 24px;
-        }
-
-        .table th,
-        .table td {
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-            font-size: 14px;
-        }
-
-        .table th {
-            font-weight: 600;
-            color: var(--text-muted);
-            background-color: #F8FAFC;
-        }
-
-        .table td {
-            color: var(--text-main);
-        }
-
-        .key-preview {
-            font-family: monospace;
-            font-size: 12px;
-            color: var(--text-muted);
-            background-color: #F1F5F9;
-            padding: 4px 8px;
-            border-radius: 4px;
-            word-break: break-all;
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 20px;
-            gap: 24px;
-        }
-
-        .tab-btn {
-            background: none;
-            border: none;
-            padding: 0 0 12px 0;
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-muted);
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .tab-btn:hover {
-            color: var(--text-main);
-        }
-
-        .tab-btn.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .mgmt-links {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px;
-        }
-
-        .mgmt-link {
-            display: block;
-            padding: 16px;
-            background: #F8FAFC;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            text-decoration: none;
-            color: var(--text-main);
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .mgmt-link:hover {
-            background: #EFF6FF;
-            border-color: #BFDBFE;
-            color: var(--primary);
-        }
-
-        .mgmt-link span {
-            display: block;
-            font-size: 12px;
-            font-weight: 400;
-            color: var(--text-muted);
-            margin-top: 4px;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/employee_dashboard.css') }}">
 </head>
 
 <body>
@@ -467,86 +38,30 @@
         {% endif %}
         {% endwith %}
 
-        {% if has_subadmin_access %}
-        <!-- SubAdmin: Management Quick Links -->
-        <div class="card">
-            <div class="card-header">
-                <h3>Management Tools</h3>
-            </div>
-            <div class="card-body">
-                <div class="mgmt-links">
-                    {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') %}
-                    <a href="{{ url_for('add_user') }}" class="mgmt-link">Add User<span>Create a new employee
-                            account</span></a>
+        <!-- Quick Actions Bar -->
+        <div class="quick-actions-card">
+            <h3 class="quick-actions-title">Quick Actions</h3>
+            <div class="quick-actions-buttons">
+                {% if has_subadmin_access %}
+                    {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') or employee_permissions.get('can_view_users_and_logs') %}
+                    <button type="button" class="btn-action btn-action-primary" onclick="openModal('mgmt-modal')">
+                        🔧 Management Tools
+                    </button>
                     {% endif %}
-                    {% if employee_permissions.get('can_view_users_and_logs') or
-                    employee_permissions.get('can_manage_users') %}
-                    <a href="{{ url_for('view_users') }}" class="mgmt-link">View Users<span>Browse and manage
-                            employees</span></a>
+                    {% if employee_permissions.get('can_fetch_credentials') %}
+                    <button type="button" class="btn-action btn-action-primary" onclick="openModal('fetch-modal')">
+                        🔑 Fetch Credentials
+                    </button>
                     {% endif %}
-                    {% if employee_permissions.get('can_view_users_and_logs') %}
-                    <a href="{{ url_for('view_audit_log') }}" class="mgmt-link">Audit Log<span>Recent management
-                            activity</span></a>
-                    {% endif %}
-                    {% if employee_permissions.get('can_manage_users') %}
-                    <a href="{{ url_for('view_regions') }}" class="mgmt-link">AWS Regions<span>Manage region
-                            configuration</span></a>
-                    {% endif %}
-                </div>
+                {% endif %}
+                <button type="button" class="btn-action" onclick="openModal('perms-modal')">
+                    🛡️ Access Permissions
+                </button>
+                <a href="/launch/svrmetrics" target="_blank" class="btn-action">
+                    📊 Server Metrics
+                </a>
             </div>
         </div>
-
-        {% if employee_permissions.get('can_fetch_credentials') %}
-        <!-- SubAdmin: Fetch Credentials -->
-        <div class="card">
-            <div class="card-header">
-                <h3>Fetch User Credentials</h3>
-            </div>
-            <div class="card-body">
-                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0;">Enter an employee's username to
-                    retrieve their OTP seed and SSH keys.</p>
-                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                    <input type="text" id="fetch-username" class="form-control" placeholder="Employee username"
-                        style="min-height: auto; flex: 1;">
-                    <button onclick="fetchCredentials()" class="btn-primary" id="fetch-btn" type="button">Fetch</button>
-                </div>
-                <div id="fetch-results"
-                    style="display: none; background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
-                    <h4 style="margin: 0 0 8px; font-size: 14px;">OTP Seed</h4>
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-                        <code id="res-otp"
-                            style="flex:1; background: white; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; word-break: break-all;"></code>
-                        <button class="btn-secondary" style="padding: 8px 12px;"
-                            onclick="navigator.clipboard.writeText(document.getElementById('res-otp').innerText)">Copy</button>
-                    </div>
-                    <h4 style="margin: 0 0 8px; font-size: 14px;">SSH Keys</h4>
-                    <div id="res-ssh" style="max-height: 150px; overflow-y: auto;"></div>
-                </div>
-                <div id="fetch-error" style="color: #DC2626; font-size: 13px; display: none; margin-top: 8px;"></div>
-
-                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
-                    <h4 style="margin: 0 0 8px; font-size: 14px;">Your Script API Token</h4>
-                    <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">Use this token to authenticate
-                        scripts for the credentials API.</p>
-                    <div
-                        style="background: #F8FAFC; border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                        <code id="api-token" data-token="{{ api_token if api_token else '' }}"
-                            style="font-size: 13px; word-break: break-all;">{{ api_token if api_token else "No token generated yet" }}</code>
-                        {% if api_token %}
-                        <button class="btn-secondary" style="padding: 8px 12px; flex-shrink: 0;"
-                            onclick="navigator.clipboard.writeText(document.getElementById('api-token').innerText)">Copy</button>
-                        {% endif %}
-                    </div>
-                    <form action="{{ url_for('generate_employee_api_token_route') }}" method="POST"
-                        style="margin-top: 12px;">
-                        <button type="submit" class="btn-secondary">{% if api_token %}Regenerate{% else %}Generate{%
-                            endif %} API Token</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        {% endif %}
 
         <!-- Section 1: Access Status -->
         {% if access_result %}
@@ -566,52 +81,7 @@
         </div>
         {% endif %}
 
-        <!-- Section 2: Access Permissions -->
-        <div class="card">
-            <div class="card-header">
-                <h3>Access Permissions</h3>
-            </div>
-            <div class="card-body">
-                <div class="permission-grid">
-                    {% if user_info.get('allowLogAccess') %}
-                    <div class="permission-item">
-                        <span class="permission-label">Log Access</span>
-                        <span class="badge badge-enabled">Enabled</span>
-                    </div>
-                    {% endif %}
 
-                    {% if user_info.get('allowServerMetricsAccess') %}
-                    <div class="permission-item">
-                        <span class="permission-label">Metrics Access</span>
-                        <span class="badge badge-enabled">Enabled</span>
-                    </div>
-                    {% endif %}
-
-                    {% if user_info.get('allowHpAgentAccess') %}
-                    <div class="permission-item">
-                        <span class="permission-label">HP Agent Access</span>
-                        <span class="badge badge-enabled">Enabled</span>
-                    </div>
-                    {% endif %}
-
-                    {% if user_info.get('portsToOpen') %}
-                    <div class="permission-item">
-                        <span class="permission-label">Global Ports</span>
-                        <span class="badge badge-enabled">{{ user_info.get('portsToOpen') | join(', ') }}</span>
-                    </div>
-                    {% endif %}
-
-                    {% if not user_info.get('allowLogAccess') and not user_info.get('allowServerMetricsAccess') and not
-                    user_info.get('allowHpAgentAccess') and not user_info.get('portsToOpen') %}
-                    <div class="permission-item">
-                        <span class="permission-label"
-                            style="color:var(--text-muted); font-weight:normal; text-transform:none;">No specific access
-                            permissions granted.</span>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
 
         <!-- Section 3: SSH Public Keys -->
         <div class="card">
@@ -690,9 +160,7 @@
         </div>
 
 
-    <div>
-        <a href="/launch/svrmetrics">📊 Server Metrics & Monitoring</a>
-    </div>
+
 
 
 
@@ -794,7 +262,155 @@
 
     </div>
 
+    <!-- Access Permissions Modal -->
+    <div id="perms-modal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'perms-modal')">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">Access Permissions</h3>
+                <button type="button" class="modal-close" onclick="closeModal('perms-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="permission-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    {% if user_info.get('allowLogAccess') %}
+                    <div class="permission-item">
+                        <span class="permission-label">Log Access</span>
+                        <span class="badge badge-enabled">Enabled</span>
+                    </div>
+                    {% endif %}
+
+                    {% if user_info.get('allowServerMetricsAccess') %}
+                    <div class="permission-item">
+                        <span class="permission-label">Metrics Access</span>
+                        <span class="badge badge-enabled">Enabled</span>
+                    </div>
+                    {% endif %}
+
+                    {% if user_info.get('allowHpAgentAccess') %}
+                    <div class="permission-item">
+                        <span class="permission-label">HP Agent Access</span>
+                        <span class="badge badge-enabled">Enabled</span>
+                    </div>
+                    {% endif %}
+
+                    {% if user_info.get('portsToOpen') %}
+                    <div class="permission-item" style="grid-column: span 2;">
+                        <span class="permission-label">Global Ports</span>
+                        <span class="badge badge-enabled" style="width: auto;">{{ user_info.get('portsToOpen') | join(', ') }}</span>
+                    </div>
+                    {% endif %}
+
+                    {% if not user_info.get('allowLogAccess') and not user_info.get('allowServerMetricsAccess') and not
+                    user_info.get('allowHpAgentAccess') and not user_info.get('portsToOpen') %}
+                    <div class="permission-item" style="grid-column: span 2;">
+                        <span class="permission-label"
+                            style="color:var(--text-muted); font-weight:normal; text-transform:none;">No specific access
+                            permissions granted.</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if has_subadmin_access %}
+    <!-- Management Tools Modal -->
+    <div id="mgmt-modal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'mgmt-modal')">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">Management Tools</h3>
+                <button type="button" class="modal-close" onclick="closeModal('mgmt-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mgmt-links">
+                    {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('add_user') }}" class="mgmt-link">Add User<span>Create a new employee account</span></a>
+                    {% endif %}
+                    {% if employee_permissions.get('can_view_users_and_logs') or employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('view_users') }}" class="mgmt-link">View Users<span>Browse and manage employees</span></a>
+                    {% endif %}
+                    {% if employee_permissions.get('can_view_users_and_logs') %}
+                    <a href="{{ url_for('view_audit_log') }}" class="mgmt-link">Audit Log<span>Recent management activity</span></a>
+                    {% endif %}
+                    {% if employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('view_regions') }}" class="mgmt-link">AWS Regions<span>Manage region configuration</span></a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if employee_permissions.get('can_fetch_credentials') %}
+    <!-- Fetch Credentials Modal -->
+    <div id="fetch-modal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'fetch-modal')">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">Fetch User Credentials</h3>
+                <button type="button" class="modal-close" onclick="closeModal('fetch-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0;">Enter an employee's username to retrieve their OTP seed and SSH keys.</p>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <input type="text" id="fetch-username" class="form-control" placeholder="Employee username" style="min-height: auto; flex: 1;">
+                    <button onclick="fetchCredentials()" class="btn-primary" id="fetch-btn" type="button">Fetch</button>
+                </div>
+                <div id="fetch-results" style="display: none; background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+                    <h4 style="margin: 0 0 8px; font-size: 14px;">OTP Seed</h4>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                        <code id="res-otp" style="flex:1; background: white; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; word-break: break-all;"></code>
+                        <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('res-otp').innerText)">Copy</button>
+                    </div>
+                    <h4 style="margin: 0 0 8px; font-size: 14px;">SSH Keys</h4>
+                    <div id="res-ssh" style="max-height: 150px; overflow-y: auto;"></div>
+                </div>
+                <div id="fetch-error" style="color: #DC2626; font-size: 13px; display: none; margin-top: 8px;"></div>
+
+                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
+                    <h4 style="margin: 0 0 8px; font-size: 14px;">Your Script API Token</h4>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">Use this token to authenticate scripts for the credentials API.</p>
+                    <div style="background: #F8FAFC; border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <code id="api-token" data-token="{{ api_token if api_token else '' }}" style="font-size: 13px; word-break: break-all;">{{ api_token if api_token else "No token generated yet" }}</code>
+                        {% if api_token %}
+                        <button class="btn-secondary" style="padding: 8px 12px; flex-shrink: 0;" onclick="navigator.clipboard.writeText(document.getElementById('api-token').innerText)">Copy</button>
+                        {% endif %}
+                    </div>
+                    <form action="{{ url_for('generate_employee_api_token_route') }}" method="POST" style="margin-top: 12px;">
+                        <button type="submit" class="btn-secondary">{% if api_token %}Regenerate{% else %}Generate{% endif %} API Token</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
     <script>
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.offsetHeight; // Force reflow
+                modal.classList.add('active');
+            }
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) {
+                modal.classList.remove('active');
+                setTimeout(() => {
+                    if (!modal.classList.contains('active')) {
+                        modal.style.display = 'none';
+                    }
+                }, 250);
+            }
+        }
+
+        function closeModalOnOverlay(event, id) {
+            if (event.target === event.currentTarget) {
+                closeModal(id);
+            }
+        }
+
         function openTab(event, tabId) {
             const contents = document.querySelectorAll('.tab-content');
             contents.forEach(content => content.classList.remove('active'));
