@@ -2,21 +2,67 @@
 {% block title %}Audit Log{% endblock %}
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-2">
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .form-select-custom {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+    color: #0F172A;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+  .form-select-custom:focus {
+    outline: none;
+    border-color: #0F172A;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+  }
+  .btn-danger-custom {
+    background-color: #FFF1F2;
+    color: #E11D48;
+    border: 1px solid #FFE4E6;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-danger-custom:hover {
+    background-color: #E11D48;
+    border-color: #E11D48;
+    color: #FFFFFF;
+  }
+</style>
+
+<div class="page-header">
     <div>
-        <h1 class="page-title" style="font-size:24px;">Audit Log</h1>
-        <p class="welcome-msg" style="margin-bottom:0;">View user login access requests and IP addresses.</p>
+        <h1 class="page-title" style="font-size:24px; font-weight:700; margin-bottom:4px;">Audit Log</h1>
+        <p class="text-muted" style="margin:0; font-size:14px;">View user login access requests and IP addresses.</p>
     </div>
     <div>
-        <form action="{{ url_for('delete_audit_log_data') }}" method="POST" class="d-flex align-items-center" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete older audit logs?', () => form.submit());">
-            <select name="days" class="custom-select" style="width: auto; margin-right: 10px; padding: 6px 12px; border-radius: 4px; border: 1px solid #CBD5E1;" required>
+        <form action="{{ url_for('delete_audit_log_data') }}" method="POST" style="display:flex; align-items:center; gap:10px; margin:0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete older audit logs?', () => form.submit());">
+            <select name="days" class="form-select-custom" required>
                 <option value="" disabled selected>Delete older than...</option>
                 <option value="1">1 Day</option>
                 <option value="7">7 Days</option>
                 <option value="15">15 Days</option>
                 <option value="30">30 Days</option>
             </select>
-            <button type="submit" class="btn-custom" style="background-color: #ef4444; color: white;">Delete</button>
+            <button type="submit" class="btn-danger-custom">Delete Logs</button>
         </form>
     </div>
 </div>

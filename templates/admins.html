@@ -2,84 +2,227 @@
 {% block title %}Manage Subadmins{% endblock %}
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3">Manage Subadmins</h1>
-        <p class="text-muted mb-0" style="font-size: 14px;">
-            Configure specific privileges for users who have been granted Subadmin access.
-        </p>
-    </div>
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .subadmin-card {
+    background: white; 
+    border: 1px solid var(--border); 
+    border-radius: 12px;
+    box-shadow: var(--shadow); 
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .custom-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    text-align: left; 
+  }
+  .custom-table th { 
+    background: #F8FAFC; 
+    color: #64748B; 
+    font-size: 12px; 
+    font-weight: 600; 
+    text-transform: uppercase; 
+    padding: 12px 16px; 
+    border-bottom: 1px solid var(--border); 
+    border-top: 1px solid var(--border); 
+    white-space: nowrap;
+  }
+  .custom-table td {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    color: #0F172A;
+    font-size: 14px;
+  }
+  .btn-outline-dark-modern {
+    background-color: transparent;
+    color: #0F172A;
+    border: 1px solid #E2E8F0;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .btn-outline-dark-modern:hover {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #0F172A;
+  }
+  .btn-dark-modern {
+    background-color: #0F172A;
+    color: #FFFFFF;
+    border: 1px solid #0F172A;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-dark-modern:hover {
+    background-color: #1E293B;
+    border-color: #1E293B;
+    color: #FFFFFF;
+  }
+  .badge-privilege {
+    background: #F1F5F9;
+    color: #334155;
+    border: 1px solid #E2E8F0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-right: 6px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    transition: opacity 0.25s ease;
+  }
+  .modal-container-custom {
+    background: white;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 450px;
+    padding: 28px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  .modal-header-custom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .modal-title-custom {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0F172A;
+    margin: 0;
+  }
+  .modal-close-custom {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #94A3B8;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+  }
+  .modal-close-custom:hover {
+    color: #475569;
+  }
+</style>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title" style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">Manage Subadmins</h1>
+    <p class="text-muted" style="margin: 0; font-size: 14px;">Configure specific privileges for users who have been granted Subadmin access.</p>
+  </div>
 </div>
 
-<!-- List Subadmins -->
-<div class="card mb-4">
-    <div class="card-header bg-light">
-        <strong>Subadmin Accounts</strong>
-    </div>
-    <div class="card-body p-0">
-        <table class="table mb-0" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr style="background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0;">
-                    <th style="padding: 12px; font-size: 13px; color: #64748B;">Username</th>
-                    <th style="padding: 12px; font-size: 13px; color: #64748B;">Privileges</th>
-                    <th style="padding: 12px; font-size: 13px; color: #64748B;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for username, user_data in subadmins.items() %}
-                <tr style="border-bottom: 1px solid #E2E8F0;">
-                    <td style="padding: 12px; font-weight: 500;">
-                        {{ username }}
-                    </td>
-                    <td style="padding: 12px;">
-                        {% set perms = user_data.get('admin_permissions', {}) %}
-                        {% for key, label in PERMISSION_DEFINITIONS %}
-                            {% if perms.get(key) %}
-                            <span style="background: #E0E7FF; color: #3730A3; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-right: 4px; display: inline-block; margin-bottom: 4px;">{{ label }}</span>
-                            {% endif %}
-                        {% endfor %}
-                    </td>
-                    <td style="padding: 12px;">
-                        <button type="button" 
-                                style="font-size: 11px; padding: 4px 8px; background: #3B82F6; color: white; border: none; border-radius: 4px; cursor: pointer;"
-                                onclick="document.getElementById('edit-modal-{{ username }}').style.display='block'">
-                            Edit Privileges
-                        </button>
+<div class="subadmin-card">
+  <table class="custom-table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Privileges</th>
+        <th style="text-align: right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for username, user_data in subadmins.items() %}
+      <tr>
+        <td style="font-weight: 600; font-size: 14px;">{{ username }}</td>
+        <td>
+          {% set perms = user_data.get('admin_permissions', {}) %}
+          {% set active_perms = [] %}
+          {% for key, label in PERMISSION_DEFINITIONS %}
+            {% if perms.get(key) %}
+              <span class="badge-privilege">{{ label }}</span>
+              {% set _ = active_perms.append(1) %}
+            {% endif %}
+          {% endfor %}
+          {% if not active_perms %}
+            <span class="text-muted" style="font-size: 13px;">No admin privileges assigned.</span>
+          {% endif %}
+        </td>
+        <td style="text-align: right; width: 150px;">
+          <button class="btn-outline-dark-modern" onclick="openEditModal('{{ username }}')">Edit Privileges</button>
 
-                        <!-- Edit Modal -->
-                        <div id="edit-modal-{{ username }}" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-                            <div style="background: white; width: 400px; margin: 100px auto; padding: 24px; border-radius: 8px;">
-                                <div class="d-flex justify-content-between mb-3">
-                                    <h5 style="margin:0;">Edit Privileges: {{ username }}</h5>
-                                    <button type="button" onclick="document.getElementById('edit-modal-{{ username }}').style.display='none'" style="border:none; background:none; font-size: 18px; cursor:pointer;">&times;</button>
-                                </div>
-                                <form action="{{ url_for('update_subadmin_route', username=username) }}" method="POST">
-                                    <div class="mb-3">
-                                        {% for key, label in PERMISSION_DEFINITIONS %}
-                                        <div class="form-check mb-2">
-                                            <input class="form-check-input" type="checkbox" name="{{ key }}" id="{{ key }}-{{ username }}"
-                                                   {% if perms.get(key) %}checked{% endif %}>
-                                            <label class="form-check-label" for="{{ key }}-{{ username }}">{{ label }}</label>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    <div class="text-end">
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('edit-modal-{{ username }}').style.display='none'">Cancel</button>
-                                        <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="3" class="text-center" style="padding: 24px; color: #64748B; font-size: 14px;">No subadmins found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+          <!-- Edit Privileges Modal -->
+          <div id="edit-modal-{{ username }}" class="modal-overlay" onclick="closeEditModalOnOutsideClick(event, '{{ username }}')">
+            <div class="modal-container-custom" style="text-align: left;">
+              <div class="modal-header-custom">
+                <h5 class="modal-title-custom">Edit Privileges: {{ username }}</h5>
+                <button type="button" class="modal-close-custom" onclick="closeEditModal('{{ username }}')">&times;</button>
+              </div>
+              <form action="{{ url_for('update_subadmin_route', username=username) }}" method="POST">
+                <div style="margin-bottom: 24px;">
+                  <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">Select the operational privileges to grant to this subadmin:</p>
+                  {% for key, label in PERMISSION_DEFINITIONS %}
+                  <label class="toggle-switch" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 8px; cursor: pointer;">
+                      <span style="font-size: 13px; font-weight: 500; color: #334155;">{{ label }}</span>
+                      <input type="checkbox" name="{{ key }}" id="{{ key }}-{{ username }}" {% if perms.get(key) %}checked{% endif %} style="width: 18px; height: 18px; accent-color: #0F172A; cursor: pointer;">
+                  </label>
+                  {% endfor %}
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                  <button type="button" class="btn-outline-dark-modern" onclick="closeEditModal('{{ username }}')">Cancel</button>
+                  <button type="submit" class="btn-dark-modern">Save Changes</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="3" style="text-align: center; padding: 40px; color: var(--text-muted);">No subadmins found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
+
+<script>
+  function openEditModal(username) {
+    document.getElementById('edit-modal-' + username).style.display = 'flex';
+  }
+  
+  function closeEditModal(username) {
+    document.getElementById('edit-modal-' + username).style.display = 'none';
+  }
+
+  function closeEditModalOnOutsideClick(event, username) {
+    const modal = document.getElementById('edit-modal-' + username);
+    if (event.target === modal) {
+      closeEditModal(username);
+    }
+  }
+</script>
 
 {% endblock %}

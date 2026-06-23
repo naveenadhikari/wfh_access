@@ -76,7 +76,27 @@ def grant_authorized_access(emp_name, ip_to_allow):
 
     logger.info(f"[PRODUCTION MODE] Granting access for {emp_name} at IP {ip_to_allow}")
     access_cfg = get_access_cfg()
-    user_cfg = access_cfg.get("ALLOWED_USR_IDENTITIES", {}).get(emp_name, {})
+    
+    # Check if the user is an admin or superadmin to grant full automatic access
+    is_admin = False
+    try:
+        from db import get_admin
+        if get_admin(emp_name):
+            is_admin = True
+    except Exception:
+        pass
+
+    if is_admin:
+        # Admins automatically get full access to all logs, metrics, agent, regions, and default ports
+        user_cfg = {
+            "allowLogAccess": True,
+            "allowServerMetricsAccess": True,
+            "allowHpAgentAccess": True,
+            "portsToOpen": [22, 3306, 80, 443, 1890],
+            "overRiddenRegionAndCfg": None
+        }
+    else:
+        user_cfg = access_cfg.get("ALLOWED_USR_IDENTITIES", {}).get(emp_name, {})
     
     if not user_cfg:
         logger.warning(f"User {emp_name} not found in configuration.")

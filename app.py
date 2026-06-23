@@ -410,7 +410,14 @@ def dashboard():
 @app.route("/admin/users")
 @require_any_permission("can_view_users_and_logs", "can_manage_users")
 def view_users():
-    users = list_users()
+    users = list_users().copy()
+    try:
+        all_admins = {adm["username"] for adm in get_all_admins()}
+        for adm_user in all_admins:
+            users.pop(adm_user, None)
+    except Exception:
+        pass
+    users.pop("admin", None) # Hard backup check
     ssh_key_status = get_all_ssh_key_status()
     return render_template("users.html", users=users, ssh_key_status=ssh_key_status)
 

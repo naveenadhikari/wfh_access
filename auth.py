@@ -88,10 +88,50 @@ def verify_admin(username, plain_password, user_sent_otp):
 
 
 if __name__ == "__main__":
+    import sys
+    import getpass
     from db import init_db
+
+    print("\n=== WFH Access Portal: Admin Provisioning Utility ===")
     init_db()
-    seed = seed_admin("admin", "admin123")
-    print()
-    print("Admin 'admin' created. Scan this seed into your authenticator app:")
-    print("  Seed:", seed)
-    print("  Current code:", pyotp.TOTP(seed).now())
+
+    try:
+        # Prompt securely using getpass so passwords don't leak in shell history
+        username = input("Enter admin username [default: admin]: ").strip() or "admin"
+        password = getpass.getpass("Enter admin password: ")
+        
+        if not password:
+            print("Error: Password cannot be empty.")
+            sys.exit(1)
+
+        confirm_password = getpass.getpass("Confirm admin password: ")
+        if password != confirm_password:
+            print("Error: Passwords do not match.")
+            sys.exit(1)
+
+        seed = seed_admin(username, password)
+        totp = pyotp.TOTP(seed)
+        uri = totp.provisioning_uri(name=username, issuer_name="WFH-Access")
+
+        print("\n[SUCCESS] Admin account configured successfully!")
+        print("==================================================")
+        print(f" Username: {username}")
+        print(f" OTP Seed: {seed}")
+        print(f" Current Authenticator Code: {totp.now()}")
+        print("==================================================")
+        
+        try:
+            import qrcode
+            qr = qrcode.QRCode(version=1, border=2)
+            qr.add_data(uri)
+            qr.make(fit=True)
+            print("\nScan this QR code with your Authenticator app:")
+            qr.print_ascii()
+        except Exception:
+            print("\n(Note: Install 'qrcode' to render a scannable QR code directly in the terminal)")
+            
+        print("\nScan the QR code above or enter the secret seed manually into your Authenticator app.")
+        print("Ensure you keep this seed secure.")
+    except KeyboardInterrupt:
+        print("\nOperation cancelled.")
+        sys.exit(1)
