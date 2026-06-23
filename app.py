@@ -56,6 +56,21 @@ import requests
 
 SVRMETRICS_URL     = "http://localhost:6400"
 SVRMETRICS_API_KEY = "svrmetrics-api-key-change-this"
+import jwt
+SSO_SECRET = "a1b2c34d5e6f7g8h9i0jklmnopqrstuvwx"  
+
+@app.route("/launch/svrmetrics")
+def launch_svrmetrics():
+    username = session.get("employee_username") or session.get("admin_username")
+    if not username:
+        return redirect(url_for("login"))
+
+    token = jwt.encode({
+        "username": username,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+    }, SSO_SECRET, algorithm="HS256")
+
+    return redirect(f"{SVRMETRICS_URL}/?token={token}")
 
 
 
