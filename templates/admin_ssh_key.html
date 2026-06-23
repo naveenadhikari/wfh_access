@@ -1,30 +1,109 @@
-{% extends "base.html" %}
-{% block title %}Admin SSH Key{% endblock %}
+{% extends "admin_layout.html" %}
+{% block title %}Admin SSH Keys{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+
+<style>
+  .btn-dark-modern {
+    background-color: #0F172A;
+    color: #FFFFFF;
+    border: 1px solid #0F172A;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-dark-modern:hover {
+    background-color: #1E293B;
+    border-color: #1E293B;
+    color: #FFFFFF;
+  }
+  .btn-outline-dark-modern {
+    background-color: transparent;
+    color: #0F172A;
+    border: 1px solid #E2E8F0;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .btn-outline-dark-modern:hover {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #0F172A;
+  }
+  .ssh-key-card {
+    background: #FFFFFF;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin-bottom: 20px;
+    transition: border-color 0.2s ease;
+  }
+  .ssh-key-card:hover {
+    border-color: #CBD5E1;
+  }
+  .ssh-textarea {
+    width: 100%;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 13px;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    background-color: #F8FAFC;
+    color: #334155;
+    resize: none;
+    box-sizing: border-box;
+    margin-bottom: 16px;
+  }
+  .ssh-textarea:focus {
+    outline: none;
+    border-color: #0F172A;
+    background-color: #FFFFFF;
+  }
+  .key-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0F172A;
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
   <div>
-    <h3>SSH Keys: {{ username }}</h3>
+    <h1 class="page-title" style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">SSH Keys: {{ username }}</h1>
+    <p class="text-muted" style="margin: 0; font-size: 14px;">Copy these public keys when granting SSH access.</p>
   </div>
-  <a href="{{ url_for('view_users') }}" class="btn btn-outline-secondary">Back to Users List</a>
+  <a href="{{ url_for('view_users') }}" class="btn-outline-dark-modern">← Back to Users List</a>
 </div>
 
 {% if ssh_keys %}
-  <p class="text-muted">Copy these public keys when granting SSH access.</p>
   {% for key in ssh_keys %}
-  <div class="card mb-3">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-      <strong>{{ key.key_name }}</strong>
-      <span class="text-muted small">Added: {{ key.created_at }}</span>
+  <div class="ssh-key-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="key-title">🔑 {{ key.key_name }}</span>
+      <span class="text-muted" style="font-size: 12px;">Added on: {{ key.created_at }}</span>
     </div>
-    <div class="card-body">
-      <textarea id="ssh-key-text-{{ key.id }}" class="form-control font-monospace mb-3" rows="4" readonly>{{ key.ssh_public_key }}</textarea>
-      <button type="button" class="btn btn-primary btn-sm" onclick="copySshKey('{{ key.id }}')">Copy to clipboard</button>
-      <span id="copy-status-{{ key.id }}" class="text-success ms-2" style="display:none;">Copied!</span>
+    <textarea id="ssh-key-text-{{ key.id }}" class="ssh-textarea" rows="4" readonly>{{ key.ssh_public_key }}</textarea>
+    <div class="d-flex align-items-center">
+      <button type="button" class="btn-dark-modern" onclick="copySshKey('{{ key.id }}')">Copy to Clipboard</button>
+      <span id="copy-status-{{ key.id }}" class="text-success ms-3" style="display:none; font-size: 14px; font-weight: 600;">✓ Copied!</span>
     </div>
   </div>
   {% endfor %}
 {% else %}
-  <div class="alert alert-warning">
+  <div class="alert alert-warning" style="background-color: #FEF9C3; color: #A16207; border: 1px solid #FEF08A; border-radius: 8px; padding: 16px;">
     This user has not uploaded any SSH public keys yet.
   </div>
 {% endif %}

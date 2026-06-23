@@ -285,6 +285,16 @@ def login():
             except Exception:
                 pass
 
+            add_audit_entry(
+                admin_username=username,
+                target_user=username,
+                action="login",
+                details={
+                    "message": "Admin logged in"
+                },
+                ip_address=admin_ip
+            )
+
             flash("Logged in successfully.", "success")
             return redirect(url_for("dashboard"))
 

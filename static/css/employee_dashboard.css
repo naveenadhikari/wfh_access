@@ -439,19 +439,21 @@ body {
 }
 
 .btn-danger {
-    background-color: #EF4444;
-    color: white;
-    border: none;
+    background-color: #FFF1F2;
+    color: #E11D48;
+    border: 1px solid #FFE4E6;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
 }
 
 .btn-danger:hover {
-    background-color: #DC2626;
+    background-color: #E11D48;
+    border-color: #E11D48;
+    color: white;
 }
 
 .btn-secondary {

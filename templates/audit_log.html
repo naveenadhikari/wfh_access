@@ -5,10 +5,10 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
     <div>
         <h1 class="page-title" style="font-size:24px;">Audit Log</h1>
-        <p class="welcome-msg" style="margin-bottom:0;">View recent administrative actions.</p>
+        <p class="welcome-msg" style="margin-bottom:0;">View user login access requests and IP addresses.</p>
     </div>
     <div>
-        <form action="{{ url_for('delete_audit_log_data') }}" method="POST" class="d-flex align-items-center" onsubmit="return confirm('Are you sure you want to delete older audit logs?');">
+        <form action="{{ url_for('delete_audit_log_data') }}" method="POST" class="d-flex align-items-center" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete older audit logs?', () => form.submit());">
             <select name="days" class="custom-select" style="width: auto; margin-right: 10px; padding: 6px 12px; border-radius: 4px; border: 1px solid #CBD5E1;" required>
                 <option value="" disabled selected>Delete older than...</option>
                 <option value="1">1 Day</option>
@@ -26,33 +26,31 @@
         <table class="custom-table">
             <thead>
                 <tr>
-                    <th>Time</th>
-                    <th>User / Admin</th>
-                    <th>Target User</th>
-                    <th>Action / IP Address</th>
+                    <th>Date / Time</th>
+                    <th>User</th>
+                    <th>IP Address</th>
                 </tr>
             </thead>
             <tbody>
+                {% set ns = namespace(count=0) %}
                 {% for e in audit_entries %}
+                {% if e["action"] in ("login", "api_login") %}
+                {% set ns.count = ns.count + 1 %}
                 <tr>
-                    <td style="white-space:nowrap; color: var(--text-muted);">{{ e["timestamp"] }}</td>
-                    <td><span style="font-weight: 500;">{{ e["admin_username"] }}</span></td>
-                    <td><strong>{{ e["target_user"] }}</strong></td>
-                    <td>
-                        <span class="badge-custom" style="background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1;">
-                            {% if e["action"] == "login" or e["action"] == "api_login" %}
-                                IP: {{ e["ip_address"] or "N/A" }}
-                            {% else %}
-                                {{ e["action"] }}
-                            {% endif %}
+                    <td style="white-space:nowrap; color: var(--text-muted); padding: 16px 24px;">{{ e["timestamp"] }}</td>
+                    <td style="padding: 16px 24px;"><strong>{{ e["target_user"] }}</strong></td>
+                    <td style="padding: 16px 24px;">
+                        <span class="badge-custom" style="background-color: #F8FAFC; color: #0F172A; border: 1px solid #E2E8F0; font-family: monospace; font-size: 13px; padding: 4px 8px; border-radius: 6px;">
+                            {{ e["ip_address"] or "N/A" }}
                         </span>
                     </td>
                 </tr>
+                {% endif %}
                 {% endfor %}
-                {% if not audit_entries %}
+                {% if ns.count == 0 %}
                 <tr>
-                    <td colspan="4" style="text-align:center; padding:40px; color:var(--text-muted);">
-                        No audit logs found.
+                    <td colspan="3" style="text-align:center; padding:40px; color:var(--text-muted);">
+                        No login audit logs found.
                     </td>
                 </tr>
                 {% endif %}

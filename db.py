@@ -233,6 +233,8 @@ def add_audit_entry(admin_username, target_user, action, details=None, ip_addres
     Insert one row into audit_log.
     `details` can be any JSON-serializable dict; we store it as a JSON string.
     """
+    if action not in ("login", "api_login"):
+        return
     conn = get_db()
     cur = conn.cursor()
     cur.execute(

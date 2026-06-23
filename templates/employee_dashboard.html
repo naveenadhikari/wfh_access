@@ -87,10 +87,10 @@
         <div class="card">
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h3>SSH Public Keys</h3>
-                <form action="{{ url_for('generate_ssh_key') }}" method="POST" style="margin: 0;"
+                <form id="generateSshForm" action="{{ url_for('generate_ssh_key') }}" method="POST" style="margin: 0;"
                     onsubmit="setTimeout(() => window.location.reload(), 1000);">
-                    <button type="submit" class="btn-secondary"
-                        onclick="return confirm('This will generate a new Ed25519 key pair. The private key will be downloaded to your computer and the public key will be saved here. Continue?')">
+                    <button type="button" class="btn-secondary"
+                        onclick="showConfirm('This will generate a new Ed25519 key pair. The private key will be downloaded to your computer and the public key will be saved here. Continue?', () => document.getElementById('generateSshForm').submit())">
                         Generate New Key Pair
                     </button>
                 </form>
@@ -117,11 +117,10 @@
                             </td>
                             <td>{{ key.created_at }}</td>
                             <td>
-                                <form action="{{ url_for('delete_ssh_key', key_id=key.id) }}" method="POST"
-                                    style="margin: 0;">
-                                    <button type="submit" class="btn-danger"
-                                        onclick="return confirm('Are you sure you want to delete this key?');">Delete</button>
-                                </form>
+                                 <form action="{{ url_for('delete_ssh_key', key_id=key.id) }}" method="POST"
+                                     style="margin: 0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete this key?', () => form.submit());">
+                                     <button type="submit" class="btn-danger">Delete</button>
+                                 </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -479,6 +478,46 @@
                 });
         }
         {% endif %}
+    </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="customConfirmModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 99999;">
+        <div style="background: white; border-radius: 12px; width: 100%; max-width: 420px; padding: 32px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); text-align: center; font-family: 'Inter', sans-serif;">
+            <div style="font-size: 48px; margin-bottom: 20px; line-height: 1;">⚠️</div>
+            <h5 style="font-size: 18px; font-weight: 700; color: #0F172A; margin: 0 0 10px 0;">Are you sure?</h5>
+            <p id="customConfirmMessage" style="font-size: 14px; color: #64748B; margin: 0 0 28px 0; line-height: 1.5;"></p>
+            <div style="display: flex; justify-content: center; gap: 16px;">
+                <button id="customConfirmCancelBtn" type="button" class="btn-secondary" style="padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid #CBD5E1; color: #475569; transition: all 0.2s ease;">Cancel</button>
+                <button id="customConfirmOkBtn" type="button" class="btn-danger" style="padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid #E11D48;">Yes, Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let confirmCallback = null;
+
+    function showConfirm(message, callback) {
+        document.getElementById('customConfirmMessage').textContent = message;
+        confirmCallback = callback;
+        document.getElementById('customConfirmModal').style.display = 'flex';
+    }
+
+    function closeConfirmModal(proceed) {
+        document.getElementById('customConfirmModal').style.display = 'none';
+        if (proceed && confirmCallback) {
+            confirmCallback();
+        }
+        confirmCallback = null;
+    }
+
+    document.getElementById('customConfirmCancelBtn').addEventListener('click', () => closeConfirmModal(false));
+    document.getElementById('customConfirmOkBtn').addEventListener('click', () => closeConfirmModal(true));
+
+    document.getElementById('customConfirmModal').addEventListener('click', function(event) {
+        if (event.target === this) {
+            closeConfirmModal(false);
+        }
+    });
     </script>
 </body>
 

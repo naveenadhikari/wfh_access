@@ -64,13 +64,70 @@ def open_port_for_hp_agent_access(emp_name, ip_to_allow):
 
 def grant_authorized_access(emp_name, ip_to_allow):
     resp = {}
-    print(f"[TEST MODE] Granting access for {emp_name} at IP {ip_to_allow} (Mocked)")
     
-    # Mock response to simulate successful network and server configurations
-    resp["logAccess"] = True
-    resp["serverMetricsAccess"] = True
-    resp["hpAgentAccess"] = {"openedCt": 1, "failedToOpenCt": 0, "alreadyOpenedCt": 0}
-    resp["ports"] = {"openedCt": 1, "failedToOpenCt": 0, "alreadyOpenedCt": 0}
+    # Check if we should run in Mock mode (default) for local testing without AWS/Nginx
+    if os.environ.get("WFH_MOCK_ACCESS", "1") == "1":
+        logger.info(f"[MOCK MODE] Granting access for {emp_name} at IP {ip_to_allow}")
+        resp["logAccess"] = True
+        resp["serverMetricsAccess"] = True
+        resp["hpAgentAccess"] = {"openedCt": 1, "failedToOpenCt": 0, "alreadyOpenedCt": 0}
+        resp["ports"] = {"openedCt": 1, "failedToOpenCt": 0, "alreadyOpenedCt": 0}
+        return resp
+
+    logger.info(f"[PRODUCTION MODE] Granting access for {emp_name} at IP {ip_to_allow}")
+    access_cfg = get_access_cfg()
+    user_cfg = access_cfg.get("ALLOWED_USR_IDENTITIES", {}).get(emp_name, {})
+    
+    if not user_cfg:
+        logger.warning(f"User {emp_name} not found in configuration.")
+        return resp
+
+    # 1. Grant Log Access if allowed
+    if user_cfg.get("allowLogAccess"):
+        try:
+            resp["logAccess"] = update_allowed_ips_for_web_access("logAccess", ip_to_allow, emp_name)
+        except Exception as e:
+            logger.exception("Failed to update log access: {}".format(e))
+            resp["logAccess"] = False
+
+    # 2. Grant Server Metrics Access if allowed
+    if user_cfg.get("allowServerMetricsAccess"):
+        try:
+            resp["serverMetricsAccess"] = update_allowed_ips_for_web_access("metricAccess", ip_to_allow, emp_name)
+        except Exception as e:
+            logger.exception("Failed to update server metrics access: {}".format(e))
+            resp["serverMetricsAccess"] = False
+
+    # 3. Grant HP Agent Access if allowed
+    if user_cfg.get("allowHpAgentAccess"):
+        try:
+            resp["hpAgentAccess"] = open_port_for_hp_agent_access(emp_name, ip_to_allow)
+        except Exception as e:
+            logger.exception("Failed to open HP Agent access: {}".format(e))
+            resp["hpAgentAccess"] = {"openedCt": 0, "failedToOpenCt": 1, "alreadyOpenedCt": 0}
+
+    # 4. Open regional ports (Global defaults or user-specific overrides)
+    if user_cfg.get("portsToOpen") or user_cfg.get("overRiddenRegionAndCfg"):
+        overridden_region_cfg = user_cfg.get("overRiddenRegionAndCfg")
+        is_global_cfg = False
+        if not overridden_region_cfg:
+            is_global_cfg = True
+            region_cfg = access_cfg.get("regionAndCfg", {}).copy()
+            ports_to_open = user_cfg.get("portsToOpen", [])
+        else:
+            region_cfg = overridden_region_cfg
+            
+        # Iterate over configured regions and open corresponding Security Groups and ports
+        for region_name, cfg in region_cfg.items():
+            if not is_global_cfg:
+                ports_to_open = cfg.get("portsToOpen", [])
+            security_group_ids = cfg.get("securityGrpIds", [])
+            for sg_id in security_group_ids:
+                try:
+                    resp["ports"] = open_ports_for_acces(emp_name, ip_to_allow, ports_to_open, sg_id, region_name)
+                except Exception as e:
+                    logger.exception(f"Failed to open ports in {region_name} for SG {sg_id}: {e}")
+                    resp["ports"] = {"openedCt": 0, "failedToOpenCt": len(ports_to_open), "alreadyOpenedCt": 0}
 
     return resp
 

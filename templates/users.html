@@ -261,13 +261,15 @@
     }
 
     .btn-danger-outline {
-        color: #DC2626;
-        border-color: #FECACA;
+        color: #E11D48;
+        border-color: #FFE4E6;
+        background-color: #FFF1F2;
     }
 
     .btn-danger-outline:hover {
-        background: #FEF2F2;
-        color: #B91C1C;
+        background-color: #E11D48;
+        border-color: #E11D48;
+        color: #FFFFFF;
     }
 </style>
 
@@ -343,7 +345,7 @@
                             {% if has_perm('can_manage_users') %}
                             <a href="{{ url_for('edit_user', username=username) }}" class="btn-outline">Edit</a>
                             <form action="{{ url_for('delete_user', username=username) }}" method="POST"
-                                style="margin:0;" onsubmit="return confirm('Delete user {{ username }}?');">
+                                style="margin:0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete user {{ username }}?', () => form.submit());">
                                 <button type="submit" class="btn-outline btn-danger-outline">Delete</button>
                             </form>
                             {% endif %}

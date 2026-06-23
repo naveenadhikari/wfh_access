@@ -1,51 +1,212 @@
 {% extends "admin_layout.html" %}
 {% block title %}Edit User{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="page-title" style="font-size:24px;">Edit User: {{ username }}</h1>
+
+<style>
+  .form-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0F172A;
+    margin-bottom: 16px;
+  }
+  .form-label-custom {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+  .form-control-custom, .form-select-custom {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+    color: #0F172A;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+  }
+  .form-control-custom:focus, .form-select-custom:focus {
+    outline: none;
+    border-color: #0F172A;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+  }
+  .permission-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 16px;
+    height: 100%;
+    transition: border-color 0.2s ease;
+  }
+  .permission-card:hover {
+    border-color: #CBD5E1;
+  }
+  .form-switch .form-check-input {
+    width: 2.2em;
+    height: 1.1em;
+    cursor: pointer;
+    margin-top: 0.15em;
+  }
+  .form-switch .form-check-input:checked {
+    background-color: #0F172A;
+    border-color: #0F172A;
+  }
+  .override-row-custom {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+  }
+  .override-row-custom:hover {
+    border-color: #CBD5E1;
+  }
+  .btn-dark-modern {
+    background-color: #0F172A;
+    color: #FFFFFF;
+    border: 1px solid #0F172A;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-dark-modern:hover {
+    background-color: #1E293B;
+    border-color: #1E293B;
+    color: #FFFFFF;
+  }
+  .btn-outline-dark-modern {
+    background-color: transparent;
+    color: #0F172A;
+    border: 1px solid #E2E8F0;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-outline-dark-modern:hover {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #0F172A;
+  }
+  .btn-outline-secondary-custom {
+    background-color: transparent;
+    color: #475569;
+    border: 1px solid #CBD5E1;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-outline-secondary-custom:hover {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    border-color: #94A3B8;
+  }
+  .btn-danger-custom {
+    background-color: #FFF1F2;
+    color: #E11D48;
+    border: 1px solid #FFE4E6;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-danger-custom:hover {
+    background-color: #E11D48;
+    border-color: #E11D48;
+    color: #FFFFFF;
+  }
+  .form-section-divider {
+    border-top: 1px solid #E2E8F0;
+    margin: 32px 0;
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="page-title" style="font-size:24px; font-weight:700;">Edit User: {{ username }}</h1>
 </div>
+
 <div class="card-custom">
-
   <form method="POST">
-    <div class="mb-3 border-top pt-3">
-      <label class="form-label">Access permissions</label>
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="allow_log_access" id="allowLog" {{ 'checked' if
-          user.get('allowLogAccess') }}>
-        <label class="form-check-label" for="allowLog">Log access</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="allow_metrics_access" id="allowMetrics" {{ 'checked' if
-          user.get('allowServerMetricsAccess') }}>
-        <label class="form-check-label" for="allowMetrics">Server metrics access</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="allow_hp_agent_access" id="allowHpAgent" {{ 'checked' if
-          user.get('allowHpAgentAccess') }}>
-        <label class="form-check-label" for="allowHpAgent">HP Agent access</label>
+    <!-- Section 1: Access Permissions -->
+    <div>
+      <h5 class="form-section-title">Access Permissions</h5>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="permission-card">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" name="allow_log_access" id="allowLog" {{ 'checked' if user.get('allowLogAccess') }}>
+              <label class="form-check-label ms-2" for="allowLog">
+                <strong class="d-block" style="font-size:14px; color:#0F172A;">Log Access</strong>
+                <span class="text-muted" style="font-size:12px;">Allow viewing server logs</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="permission-card">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" name="allow_metrics_access" id="allowMetrics" {{ 'checked' if user.get('allowServerMetricsAccess') }}>
+              <label class="form-check-label ms-2" for="allowMetrics">
+                <strong class="d-block" style="font-size:14px; color:#0F172A;">Metrics Access</strong>
+                <span class="text-muted" style="font-size:12px;">Allow server health views</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="permission-card">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" name="allow_hp_agent_access" id="allowHpAgent" {{ 'checked' if user.get('allowHpAgentAccess') }}>
+              <label class="form-check-label ms-2" for="allowHpAgent">
+                <strong class="d-block" style="font-size:14px; color:#0F172A;">HP Agent Access</strong>
+                <span class="text-muted" style="font-size:12px;">Allow honeypot client</span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label">Ports to open (comma-separated)</label>
-      <input type="text" name="ports_to_open" class="form-control"
-        value="{{ user.get('portsToOpen', []) | join(', ') }}">
+    <div class="form-section-divider"></div>
+
+    <!-- Section 2: Global Ports -->
+    <div class="mb-4">
+      <label class="form-label-custom">Ports to Open (comma-separated)</label>
+      <input type="text" name="ports_to_open" class="form-control-custom" value="{{ user.get('portsToOpen', []) | join(', ') }}" placeholder="e.g. 22, 80, 443">
     </div>
 
-    <div class="mb-4 mt-4 border-top pt-3">
-      <h5>Custom Region & Security Group Overrides</h5>
-      <p class="text-muted small">By default, ports are opened across all globally configured regions and security
-        groups. If you specify overrides below, the user will ONLY have access to these specific regions and security
-        groups.</p>
+    <div class="form-section-divider"></div>
+
+    <!-- Section 3: Region Overrides -->
+    <div class="mb-4">
+      <h5 class="form-section-title">Custom Region & Security Group Overrides</h5>
+      <p class="text-muted" style="font-size:13px; line-height:1.5; margin-bottom: 20px;">
+        By default, ports are opened across all globally configured regions and security groups. If you specify overrides below, the user will ONLY have access to these specific regions and security groups.
+      </p>
 
       <div id="regionOverridesContainer">
         {% set overrides = user.get('overRiddenRegionAndCfg', {}) %}
         {% for region, cfg in overrides.items() %}
-        <div class="row mb-3 align-items-end border p-2 rounded bg-light override-row">
+        <div class="row g-3 align-items-end override-row-custom override-row">
           <div class="col-md-3">
-            <label class="form-label small">Region Name</label>
-            <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)"
-              required>
+            <label class="form-label-custom">Region Name</label>
+            <select name="override_region[]" class="form-select-custom region-select" onchange="updateSgs(this)" required>
               <option value="">-- Select Region --</option>
               {% for rName in global_regions.keys() %}
               <option value="{{ rName }}" {% if rName==region %}selected{% endif %}>{{ rName }}</option>
@@ -53,31 +214,35 @@
             </select>
           </div>
           <div class="col-md-4">
-            <label class="form-label small">Security Group IDs (comma-separated)</label>
-            <input type="text" name="override_sgs[]" class="form-control form-control-sm sg-input"
-              value="{{ cfg.securityGrpIds | join(', ') }}">
+            <label class="form-label-custom">Security Group IDs (comma-separated)</label>
+            <input type="text" name="override_sgs[]" class="form-control-custom sg-input" value="{{ cfg.securityGrpIds | join(', ') }}">
           </div>
           <div class="col-md-3">
-            <label class="form-label small">Ports to Open</label>
-            <input type="text" name="override_ports[]" class="form-control form-control-sm"
-              value="{{ cfg.portsToOpen | join(', ') }}">
+            <label class="form-label-custom">Ports to Open</label>
+            <input type="text" name="override_ports[]" class="form-control-custom" value="{{ cfg.portsToOpen | join(', ') }}">
           </div>
-          <div class="col-md-2">
-            <button type="button" class="btn btn-danger btn-sm w-100"
-              onclick="this.parentElement.parentElement.remove()">Remove</button>
+          <div class="col-md-2 text-end">
+            <button type="button" class="btn-danger-custom w-100" onclick="this.parentElement.parentElement.remove()">Remove</button>
           </div>
         </div>
         {% endfor %}
       </div>
 
-      <button type="button" class="btn btn-outline-secondary btn-sm mb-3" onclick="addOverrideRow()">+ Add Region
-        Override</button>
+      <button type="button" class="btn-outline-secondary-custom mt-2 mb-3" onclick="addOverrideRow()">+ Add Region Override</button>
     </div>
 
+    <div class="form-section-divider"></div>
+
+    <!-- Section 4: SubAdmin Privileges -->
     {% include "_subadmin_permissions.html" %}
 
-    <button type="submit" class="btn btn-primary">Save Changes</button>
-    <a href="{{ url_for('view_users') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+    <div class="form-section-divider"></div>
+
+    <!-- Form Actions -->
+    <div class="d-flex align-items-center">
+      <button type="submit" class="btn-dark-modern">Save Changes</button>
+      <a href="{{ url_for('view_users') }}" class="btn-outline-dark-modern ms-3">Cancel</a>
+    </div>
   </form>
 
   <script>
@@ -86,7 +251,7 @@
     function addOverrideRow(region = '', sgs = '', ports = '') {
       const container = document.getElementById('regionOverridesContainer');
       const row = document.createElement('div');
-      row.className = 'row mb-3 align-items-end border p-2 rounded bg-light override-row';
+      row.className = 'row g-3 align-items-end override-row-custom override-row';
 
       let optionsHtml = '<option value="">-- Select Region --</option>';
       for (const [rName, rData] of Object.entries(globalRegions)) {
@@ -96,21 +261,21 @@
 
       row.innerHTML = `
         <div class="col-md-3">
-            <label class="form-label small">Region Name</label>
-            <select name="override_region[]" class="form-select form-select-sm region-select" onchange="updateSgs(this)" required>
+            <label class="form-label-custom">Region Name</label>
+            <select name="override_region[]" class="form-select-custom region-select" onchange="updateSgs(this)" required>
                 ${optionsHtml}
             </select>
         </div>
         <div class="col-md-4">
-            <label class="form-label small">Security Group IDs (comma-separated)</label>
-            <input type="text" name="override_sgs[]" class="form-control form-control-sm sg-input" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
+            <label class="form-label-custom">Security Group IDs (comma-separated)</label>
+            <input type="text" name="override_sgs[]" class="form-control-custom sg-input" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
         </div>
         <div class="col-md-3">
-            <label class="form-label small">Ports to Open</label>
-            <input type="text" name="override_ports[]" class="form-control form-control-sm" placeholder="e.g. 22, 443" value="${ports}">
+            <label class="form-label-custom">Ports to Open</label>
+            <input type="text" name="override_ports[]" class="form-control-custom" placeholder="e.g. 22, 443" value="${ports}">
         </div>
-        <div class="col-md-2">
-            <button type="button" class="btn btn-danger btn-sm w-100" onclick="this.parentElement.parentElement.remove()">Remove</button>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn-danger-custom w-100" onclick="this.parentElement.parentElement.remove()">Remove</button>
         </div>
     `;
       container.appendChild(row);

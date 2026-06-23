@@ -3,315 +3,303 @@
 {% block content %}
 
 <style>
-    .section-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--text-main);
-        margin-bottom: 16px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .form-group {
-        margin-bottom: 24px;
-    }
-
-    .form-label {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 8px;
-        display: block;
-    }
-
-    .form-text {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-top: 6px;
-    }
-
-    /* Toggle Switches */
-    .custom-switch {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
-    }
-
-    .switch {
-        position: relative;
-        display: inline-block;
-        width: 44px;
-        height: 24px;
-    }
-
-    .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-
-    .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #CBD5E1;
-        transition: .3s;
-        border-radius: 24px;
-    }
-
-    .slider:before {
-        position: absolute;
-        content: "";
-        height: 18px;
-        width: 18px;
-        left: 3px;
-        bottom: 3px;
-        background-color: white;
-        transition: .3s;
-        border-radius: 50%;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    }
-
-    input:checked+.slider {
-        background-color: var(--primary);
-    }
-
-    input:checked+.slider:before {
-        transform: translateX(20px);
-    }
-
-    .switch-label {
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text-main);
-        cursor: pointer;
-    }
-
-    .override-row {
-        background-color: #F8FAFC;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 16px;
-        display: flex;
-        align-items: end;
-        gap: 16px;
-    }
-
-    .override-col {
-        flex: 1;
-    }
-
-    .btn-remove {
-        background-color: #FEF2F2;
-        color: #DC2626;
-        border: 1px solid #FECACA;
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .btn-remove:hover {
-        background-color: #FEE2E2;
-    }
-
-    .btn-add-outline {
-        background-color: #FFFFFF;
-        color: var(--primary);
-        border: 1px dashed var(--primary);
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-        width: 100%;
-        text-align: center;
-    }
-
-    .btn-add-outline:hover {
-        background-color: #EFF6FF;
-    }
-
-    .actions-bar {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: 32px;
-        padding-top: 24px;
-        border-top: 1px solid var(--border);
-    }
-
-    .btn-black {
-        background-color: #111827;
-        color: #FFFFFF;
-        border: none;
-        padding: 10px 24px;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 500;
-        text-decoration: none;
-        transition: all 0.2s;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        cursor: pointer;
-    }
-
-    .btn-black:hover {
-        background-color: #000000;
-        color: #FFFFFF;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-    }
+  .form-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0F172A;
+    margin-bottom: 16px;
+  }
+  .form-label-custom {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+  .form-control-custom, .form-select-custom {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+    color: #0F172A;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+  }
+  .form-control-custom:focus, .form-select-custom:focus {
+    outline: none;
+    border-color: #0F172A;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+  }
+  .permission-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 16px;
+    height: 100%;
+    transition: border-color 0.2s ease;
+  }
+  .permission-card:hover {
+    border-color: #CBD5E1;
+  }
+  .form-switch .form-check-input {
+    width: 2.2em;
+    height: 1.1em;
+    cursor: pointer;
+    margin-top: 0.15em;
+  }
+  .form-switch .form-check-input:checked {
+    background-color: #0F172A;
+    border-color: #0F172A;
+  }
+  .override-row-custom {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+  }
+  .override-row-custom:hover {
+    border-color: #CBD5E1;
+  }
+  .btn-dark-modern {
+    background-color: #0F172A;
+    color: #FFFFFF;
+    border: 1px solid #0F172A;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-dark-modern:hover {
+    background-color: #1E293B;
+    border-color: #1E293B;
+    color: #FFFFFF;
+  }
+  .btn-outline-dark-modern {
+    background-color: transparent;
+    color: #0F172A;
+    border: 1px solid #E2E8F0;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-outline-dark-modern:hover {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #0F172A;
+  }
+  .btn-outline-secondary-custom {
+    background-color: transparent;
+    color: #475569;
+    border: 1px solid #CBD5E1;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-outline-secondary-custom:hover {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    border-color: #94A3B8;
+  }
+  .btn-danger-custom {
+    background-color: #FFF1F2;
+    color: #E11D48;
+    border: 1px solid #FFE4E6;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-danger-custom:hover {
+    background-color: #E11D48;
+    border-color: #E11D48;
+    color: #FFFFFF;
+  }
+  .form-section-divider {
+    border-top: 1px solid #E2E8F0;
+    margin: 32px 0;
+  }
 </style>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <h1 class="page-title" style="font-size:24px; margin-bottom: 4px;">Add New User</h1>
-        <p class="text-muted" style="margin-bottom:0;">Create a new employee WFH access account.</p>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="page-title" style="font-size:24px; font-weight:700; margin-bottom: 4px;">Add New User</h1>
+    <p class="text-muted" style="margin-bottom:0; font-size:14px;">Create a new employee WFH access account.</p>
+  </div>
 </div>
 
 <div class="card-custom">
-    <form method="POST">
-        <!-- Section 1: User Information -->
-        <h3 class="section-title">1. User Information</h3>
-        <div class="row form-group">
-            <div class="col-md-6">
-                <label class="form-label">Username</label>
-                <input type="text" name="username" class="form-control" required pattern="[a-zA-Z0-9._-]+"
-                    placeholder="e.g. john.doe">
-                <div class="form-text">Letters, numbers, dots, underscores, hyphens only.</div>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label">Role Template</label>
-                <select name="role_template" class="form-select" id="roleSelect">
-                    <option value="">-- Custom (choose manually below) --</option>
-                    {% for t in role_templates %}
-                    <option value="{{ t['id'] }}">{{ t['name'] }}</option>
-                    {% endfor %}
-                </select>
-                <div class="form-text">Pre-fills permissions based on role.</div>
-            </div>
+  <form method="POST">
+    <!-- Section 1: User Information -->
+    <div>
+      <h5 class="form-section-title">1. User Information</h5>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label-custom">Username</label>
+          <input type="text" name="username" class="form-control-custom" required pattern="[a-zA-Z0-9._-]+" placeholder="e.g. john.doe">
+          <div class="text-muted" style="font-size:12px; margin-top:6px;">Letters, numbers, dots, underscores, hyphens only.</div>
         </div>
+        <div class="col-md-6">
+          <label class="form-label-custom">Role Template</label>
+          <select name="role_template" class="form-select-custom" id="roleSelect">
+            <option value="">-- Custom (choose manually below) --</option>
+            {% for t in role_templates %}
+            <option value="{{ t['id'] }}">{{ t['name'] }}</option>
+            {% endfor %}
+          </select>
+          <div class="text-muted" style="font-size:12px; margin-top:6px;">Pre-fills permissions based on role.</div>
+        </div>
+      </div>
+    </div>
 
+    <div class="form-section-divider"></div>
 
-
-        <!-- Section 2: Access Permissions -->
-        <h3 class="section-title mt-4">Access Permissions (WFH)</h3>
-        <div class="form-group p-3 bg-light border rounded">
-            <div class="custom-switch">
-                <label class="switch">
-                    <input type="checkbox" name="allow_log_access" id="allowLog">
-                    <span class="slider"></span>
-                </label>
-                <label class="switch-label" for="allowLog">Log Access</label>
+    <!-- Section 2: Access Permissions -->
+    <div>
+      <h5 class="form-section-title">2. Access Permissions (WFH)</h5>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="permission-card">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" name="allow_log_access" id="allowLog">
+              <label class="form-check-label ms-2" for="allowLog">
+                <strong class="d-block" style="font-size:14px; color:#0F172A;">Log Access</strong>
+                <span class="text-muted" style="font-size:12px;">Allow viewing server logs</span>
+              </label>
             </div>
-            <div class="custom-switch">
-                <label class="switch">
-                    <input type="checkbox" name="allow_metrics_access" id="allowMetrics">
-                    <span class="slider"></span>
-                </label>
-                <label class="switch-label" for="allowMetrics">Server Metrics Access</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="permission-card">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" name="allow_metrics_access" id="allowMetrics">
+              <label class="form-check-label ms-2" for="allowMetrics">
+                <strong class="d-block" style="font-size:14px; color:#0F172A;">Metrics Access</strong>
+                <span class="text-muted" style="font-size:12px;">Allow server health views</span>
+              </label>
             </div>
-            <div class="custom-switch mb-0">
-                <label class="switch">
-                    <input type="checkbox" name="allow_hp_agent_access" id="allowHpAgent">
-                    <span class="slider"></span>
-                </label>
-                <label class="switch-label" for="allowHpAgent">HP Agent Access</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="permission-card">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" name="allow_hp_agent_access" id="allowHpAgent">
+              <label class="form-check-label ms-2" for="allowHpAgent">
+                <strong class="d-block" style="font-size:14px; color:#0F172A;">HP Agent Access</strong>
+                <span class="text-muted" style="font-size:12px;">Allow honeypot client</span>
+              </label>
             </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Section 3: Network Configuration -->
-        <h3 class="section-title mt-4">3. Network Configuration</h3>
-        <div class="form-group">
-            <label class="form-label">Global Ports to Open</label>
-            <input type="text" name="ports_to_open" id="portsToOpen" class="form-control" value="22"
-                placeholder="e.g. 22, 3306">
-            <div class="form-text">Leave empty to skip opening security-group ports for default regions.</div>
-        </div>
+    <div class="form-section-divider"></div>
 
-     
+    <!-- Section 3: Global Ports -->
+    <div class="mb-4">
+      <label class="form-label-custom">Global Ports to Open</label>
+      <input type="text" name="ports_to_open" id="portsToOpen" class="form-control-custom" value="22" placeholder="e.g. 22, 3306">
+      <div class="text-muted" style="font-size:12px; margin-top:6px;">Leave empty to skip opening security-group ports for default regions.</div>
+    </div>
 
-        <!-- Section 4: Region Overrides -->
-        <h3 class="section-title mt-4">4. Region Overrides</h3>
-        <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">
-            If you specify overrides below, the user will <strong>ONLY</strong> have access to these specific regions
-            and security groups, ignoring global ports completely.
-        </p>
+    <div class="form-section-divider"></div>
 
-        <div id="regionOverridesContainer">
-            <!-- Dynamic rows will be added here -->
-        </div>
+    <!-- Section 4: Region Overrides -->
+    <div class="mb-4">
+      <h5 class="form-section-title">3. Region Overrides</h5>
+      <p class="text-muted" style="font-size:13px; line-height:1.5; margin-bottom: 20px;">
+        If you specify overrides below, the user will <strong>ONLY</strong> have access to these specific regions and security groups, ignoring global ports completely.
+      </p>
 
-        <button type="button" class="btn-add-outline" onclick="addOverrideRow()">+ Add Region Override</button>
+      <div id="regionOverridesContainer">
+        <!-- Dynamic rows will be added here -->
+      </div>
 
-        {% include "_subadmin_permissions.html" %}
+      <button type="button" class="btn-outline-secondary-custom mt-2 mb-3" onclick="addOverrideRow()">+ Add Region Override</button>
+    </div>
 
-        <div class="actions-bar">
-            <button type="submit" class="btn-black">Create User</button>
-        </div>
-    </form>
-</div>
+    <div class="form-section-divider"></div>
 
-<script>
+    <!-- Section 5: SubAdmin Privileges -->
+    {% include "_subadmin_permissions.html" %}
+
+    <div class="form-section-divider"></div>
+
+    <!-- Form Actions -->
+    <div class="d-flex align-items-center">
+      <button type="submit" class="btn-dark-modern">Create User</button>
+      <a href="{{ url_for('view_users') }}" class="btn-outline-dark-modern ms-3">Cancel</a>
+    </div>
+  </form>
+
+  <script>
     const globalRegions = {{ global_regions | tojson | safe }};
 
     function addOverrideRow(region = '', sgs = '', ports = '') {
-        const container = document.getElementById('regionOverridesContainer');
-        const row = document.createElement('div');
-        row.className = 'override-row';
+      const container = document.getElementById('regionOverridesContainer');
+      const row = document.createElement('div');
+      row.className = 'row g-3 align-items-end override-row-custom override-row';
 
-        let optionsHtml = '<option value="">-- Select Region --</option>';
-        for (const [rName, rData] of Object.entries(globalRegions)) {
-            const selected = (rName === region) ? 'selected' : '';
-            optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
-        }
+      let optionsHtml = '<option value="">-- Select Region --</option>';
+      for (const [rName, rData] of Object.entries(globalRegions)) {
+        const selected = (rName === region) ? 'selected' : '';
+        optionsHtml += `<option value="${rName}" ${selected}>${rName}</option>`;
+      }
 
-        row.innerHTML = `
-        <div class="override-col" style="flex: 0.8">
-            <label class="form-label" style="font-size: 11px;">Region Name</label>
-            <select name="override_region[]" class="form-select region-select" onchange="updateSgs(this)" required>
+      row.innerHTML = `
+        <div class="col-md-3">
+            <label class="form-label-custom">Region Name</label>
+            <select name="override_region[]" class="form-select-custom region-select" onchange="updateSgs(this)" required>
                 ${optionsHtml}
             </select>
         </div>
-        <div class="override-col" style="flex: 1.5">
-            <label class="form-label" style="font-size: 11px;">Security Group IDs</label>
-            <input type="text" name="override_sgs[]" class="form-control sg-input" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
+        <div class="col-md-4">
+            <label class="form-label-custom">Security Group IDs</label>
+            <input type="text" name="override_sgs[]" class="form-control-custom sg-input" placeholder="e.g. sg-12345, sg-67890" value="${sgs}">
         </div>
-        <div class="override-col" style="flex: 1">
-            <label class="form-label" style="font-size: 11px;">Ports to Open</label>
-            <input type="text" name="override_ports[]" class="form-control" placeholder="e.g. 22, 443" value="${ports}">
+        <div class="col-md-3">
+            <label class="form-label-custom">Ports to Open</label>
+            <input type="text" name="override_ports[]" class="form-control-custom" placeholder="e.g. 22, 443" value="${ports}">
         </div>
-        <div>
-            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()">Remove</button>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn-danger-custom w-100" onclick="this.parentElement.parentElement.remove()">Remove</button>
         </div>
-    `;
-        container.appendChild(row);
+      `;
+      container.appendChild(row);
     }
 
     function updateSgs(selectElement) {
-        const region = selectElement.value;
-        const row = selectElement.closest('.override-row');
-        const sgInput = row.querySelector('.sg-input');
+      const region = selectElement.value;
+      const row = selectElement.closest('.override-row');
+      const sgInput = row.querySelector('.sg-input');
 
-        if (region && globalRegions[region]) {
-            const sgs = globalRegions[region].securityGrpIds || [];
-            sgInput.value = sgs.join(', ');
-        } else {
-            sgInput.value = '';
-        }
+      if (region && globalRegions[region]) {
+        const sgs = globalRegions[region].securityGrpIds || [];
+        sgInput.value = sgs.join(', ');
+      } else {
+        sgInput.value = '';
+      }
     }
-</script>
+  </script>
 
-<script>
+  <script>
     const templates = {{ role_templates_json | safe }};
     document.getElementById('roleSelect').addEventListener('change', function () {
         const t = templates[this.value];
@@ -321,6 +309,6 @@
         document.getElementById('allowHpAgent').checked = !!t.allow_hp_agent_access;
         document.getElementById('portsToOpen').value = t.ports_to_open.join(',');
     });
-</script>
-
+  </script>
+</div>
 {% endblock %}
