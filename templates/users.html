@@ -261,9 +261,6 @@
             }} WFH users.</p>
     </div>
     <div style="display: flex; gap: 12px;">
-        {% if has_perm('can_manage_users') %}
-        <a href="{{ url_for('view_regions') }}" class="btn-outline-dark-modern">⚙️ AWS Region Management</a>
-        {% endif %}
         {% if has_perm('can_add_user') or has_perm('can_manage_users') %}
         <a href="{{ url_for('add_user') }}" class="btn-dark-modern">+ Add New User</a>
         {% endif %}
@@ -413,10 +410,66 @@
                 {% endfor %}
             </tbody>
         </table>
+        
+        <div class="pagination-controls" id="usersPagination" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-top: 1px solid var(--border); background: white;">
+            <div style="font-size: 13px; color: #64748B;">
+                Showing <span id="usersPageInfo">0-0 of 0</span> users
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn-outline" id="usersPrevBtn" onclick="changeUsersPage(-1)" disabled>Previous</button>
+                <button class="btn-outline" id="usersNextBtn" onclick="changeUsersPage(1)" disabled>Next</button>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <script>
+    let usersCurrentPage = 1;
+    const usersPerPage = 10;
+    
+    function renderUsersPagination() {
+        const tbody = document.querySelector('.custom-table tbody');
+        const mainRows = tbody.querySelectorAll('.main-row');
+        const totalItems = mainRows.length;
+        const totalPages = Math.ceil(totalItems / usersPerPage) || 1;
+        
+        if (usersCurrentPage > totalPages) usersCurrentPage = totalPages;
+        if (usersCurrentPage < 1) usersCurrentPage = 1;
+        
+        const startIndex = (usersCurrentPage - 1) * usersPerPage;
+        const endIndex = startIndex + usersPerPage;
+        
+        mainRows.forEach((row, index) => {
+            const detailsRow = row.nextElementSibling;
+            if (index >= startIndex && index < endIndex) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+                if (detailsRow) {
+                    detailsRow.classList.remove('show');
+                    row.classList.remove('open');
+                }
+            }
+        });
+        
+        const endDisplay = Math.min(endIndex, totalItems);
+        const startDisplay = totalItems === 0 ? 0 : startIndex + 1;
+        document.getElementById('usersPageInfo').textContent = `${startDisplay}-${endDisplay} of ${totalItems}`;
+        
+        document.getElementById('usersPrevBtn').disabled = usersCurrentPage === 1;
+        document.getElementById('usersNextBtn').disabled = usersCurrentPage === totalPages || totalPages === 0;
+    }
+    
+    function changeUsersPage(delta) {
+        usersCurrentPage += delta;
+        renderUsersPagination();
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        renderUsersPagination();
+    });
+
     function toggleRow(id, rowElement) {
         const detailsRow = document.getElementById('details-' + id);
         if (detailsRow.classList.contains('show')) {

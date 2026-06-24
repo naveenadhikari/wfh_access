@@ -189,10 +189,6 @@ def get_data_from_request_inner(request):
 
 def open_ports_for_acces(emp_name, ip_to_allow, ports_to_open, security_group_id, region_name):
     status = False
-    if emp_name == "anilk":
-        cidr_ip_to_allow = ip_to_allow + "/24"
-    else:
-        cidr_ip_to_allow = ip_to_allow + "/32"
     # ports_to_open = [22, 3306, 6379]
     ec2 = boto3.client('ec2', region_name)
     # Remove OLD allowed IP

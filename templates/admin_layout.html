@@ -93,27 +93,10 @@
 {% endif %}
 
 <div class="layout-body">
+    {% if not is_employee_portal() %}
     <div class="sidebar">
-        <div class="sidebar-header">{% if is_employee_portal() %}Employee Portal{% else %}Admin Access{% endif %}</div>
+        <div class="sidebar-header">Admin Access</div>
         <div class="sidebar-menu">
-            {% if is_employee_portal() %}
-            <a href="{{ url_for('employee_dashboard') }}" class="menu-item">My Dashboard</a>
-            {% if has_perm('can_add_user') or has_perm('can_manage_users') %}
-            <a href="{{ url_for('add_user') }}" class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
-            {% endif %}
-            {% if has_perm('can_view_users_and_logs') or has_perm('can_manage_users') %}
-            <a href="{{ url_for('view_users') }}" class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View Users</a>
-            {% endif %}
-            {% if has_perm('can_view_users_and_logs') %}
-            <a href="{{ url_for('view_audit_log') }}" class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
-            {% endif %}
-            {% if has_perm('can_manage_users') %}
-            <a href="{{ url_for('view_regions') }}" class="menu-item {% if request.endpoint == 'view_regions' %}active{% endif %}">AWS Regions</a>
-            {% endif %}
-            {% if has_perm('can_manage_users') or has_perm('can_view_users_and_logs') %}
-            <a href="{{ url_for('view_admins') }}" class="menu-item {% if request.endpoint == 'view_admins' %}active{% endif %}">Manage Subadmins</a>
-            {% endif %}
-            {% else %}
             <a href="{{ url_for('dashboard') }}" class="menu-item {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
             <a href="{{ url_for('view_admins') }}" class="menu-item {% if request.endpoint == 'view_admins' %}active{% endif %}">Manage Subadmins</a>
             <a href="{{ url_for('add_user') }}" class="menu-item {% if request.endpoint == 'add_user' %}active{% endif %}">Add New User</a>
@@ -122,9 +105,9 @@
             <div class="menu-divider"></div>
             <a href="{{ url_for('view_regions') }}" class="menu-item {% if request.endpoint == 'view_regions' %}active{% endif %}">AWS Region Management</a>
             <a href="/launch/svrmetrics" target="_blank" class="menu-item">Server Metrics & Monitoring</a>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
 
     <div class="main-wrapper w-100">
         <div class="top-header">
