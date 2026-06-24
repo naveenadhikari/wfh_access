@@ -10,26 +10,7 @@
         margin-bottom: 24px;
     }
 
-    .btn-black {
-        background-color: #111827;
-        color: #FFFFFF;
-        border: none;
-        padding: 10px 24px;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 500;
-        text-decoration: none;
-        transition: all 0.2s;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        cursor: pointer;
-        display: inline-block;
-    }
 
-    .btn-black:hover {
-        background-color: #000000;
-        color: #FFFFFF;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-    }
 
     .table-card {
         background: white;
@@ -281,10 +262,10 @@
     </div>
     <div style="display: flex; gap: 12px;">
         {% if has_perm('can_manage_users') %}
-        <a href="{{ url_for('view_regions') }}" class="btn-black" style="background-color: #F8FAFC; color: #111827; border: 1px solid var(--border);">⚙️ AWS Region Management</a>
+        <a href="{{ url_for('view_regions') }}" class="btn-outline-dark-modern">⚙️ AWS Region Management</a>
         {% endif %}
         {% if has_perm('can_add_user') or has_perm('can_manage_users') %}
-        <a href="{{ url_for('add_user') }}" class="btn-black">+ Add New User</a>
+        <a href="{{ url_for('add_user') }}" class="btn-dark-modern">+ Add New User</a>
         {% endif %}
     </div>
 </div>

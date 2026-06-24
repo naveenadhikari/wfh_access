@@ -130,11 +130,15 @@
         <div class="top-header">
             <div class="profile-info">
                 {% if is_employee_portal() %}
-                <div class="avatar">{{ session['employee_username'][0]|upper }}</div>
-                <div class="username">{{ session['employee_username'] }}</div>
+                <div class="avatar" style="cursor: pointer;" onclick="openAccessProfileModal()" title="View Access Level">{{ session['employee_username'][0]|upper }}</div>
+                <div class="username" style="cursor: pointer;" onclick="openAccessProfileModal()" title="View Access Level">
+                    {{ session['employee_username'] }}
+                </div>
                 {% else %}
-                <div class="avatar">{{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}</div>
-                <div class="username">{{ session['admin_username'] or 'admin' }}</div>
+                <div class="avatar" style="cursor: pointer;" onclick="openAccessProfileModal()" title="View Access Level">{{ session['admin_username'][0]|upper if session['admin_username'] else 'A' }}</div>
+                <div class="username" style="cursor: pointer;" onclick="openAccessProfileModal()" title="View Access Level">
+                    {{ session['admin_username'] or 'admin' }}
+                </div>
                 {% endif %}
                 <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
             </div>
@@ -192,7 +196,101 @@ document.getElementById('customConfirmModal').addEventListener('click', function
         closeConfirmModal(false);
     }
 });
+
+function openAccessProfileModal() {
+    document.getElementById('adminAccessProfileModal').style.display = 'flex';
+}
+
+function closeAccessProfileModal() {
+    document.getElementById('adminAccessProfileModal').style.display = 'none';
+}
+
+document.getElementById('adminAccessProfileModal').addEventListener('click', function(event) {
+    if (event.target === this) {
+        closeAccessProfileModal();
+    }
+});
 </script>
+
+<!-- Admin Access Profile Modal -->
+<div id="adminAccessProfileModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 9999;">
+    <div style="background: white; border-radius: 12px; width: 100%; max-width: 480px; padding: 32px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); font-family: 'Inter', sans-serif; text-align: left; position: relative;">
+        <button type="button" onclick="closeAccessProfileModal()" style="position: absolute; top: 20px; right: 20px; background: none; border: none; font-size: 24px; color: #94A3B8; cursor: pointer; line-height: 1;">&times;</button>
+        
+        <h5 style="font-size: 18px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+            🔒 My Access & Permissions
+        </h5>
+        <p style="font-size: 13px; color: #64748B; margin: 0 0 24px 0;">Current administrator privilege levels and network access rules.</p>
+        
+        <div style="background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 13px; color: #64748B;">Username:</span>
+                <strong style="font-size: 13px; color: #0F172A;">{{ session['admin_username'] or session['employee_username'] or 'admin' }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 13px; color: #64748B;">Role Level:</span>
+                <span style="font-size: 11px; font-weight: 700; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">
+                    {% if session['admin_role'] == 'superadmin' or not (session['admin_permissions'] or session['employee_permissions']) %}
+                        System Administrator
+                    {% else %}
+                        Delegated Administrator
+                    {% endif %}
+                </span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: #64748B;">Auto WFH Access:</span>
+                <strong style="font-size: 13px; color: #16A34A;">Enabled (All Regions/Ports)</strong>
+            </div>
+        </div>
+
+        <h6 style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748B; margin-bottom: 12px; letter-spacing: 0.05em;">Admin Console Permissions</h6>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;">
+            {% set admin_roles_list = session['admin_permissions'] or session['employee_permissions'] %}
+            {% if session['admin_role'] == 'superadmin' or not admin_roles_list %}
+                <!-- Superadmin has all permissions -->
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #0F172A; font-weight: 500;">
+                    <span style="color: #16A34A;">✓</span> Full Console Administration (superadmin)
+                </div>
+            {% else %}
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {% if admin_roles_list.get('can_view_users_and_logs') %}#0F172A{% else %}#94A3B8{% endif %};">
+                    <span style="color: {% if admin_roles_list.get('can_view_users_and_logs') %}#16A34A{% else %}#EF4444{% endif %};">{% if admin_roles_list.get('can_view_users_and_logs') %}✓{% else %}✗{% endif %}</span> Can View Users and Audit Logs
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {% if admin_roles_list.get('can_manage_users') %}#0F172A{% else %}#94A3B8{% endif %};">
+                    <span style="color: {% if admin_roles_list.get('can_manage_users') %}#16A34A{% else %}#EF4444{% endif %};">{% if admin_roles_list.get('can_manage_users') %}✓{% else %}✗{% endif %}</span> Can Manage Users & Edit Regions
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {% if admin_roles_list.get('can_fetch_credentials') %}#0F172A{% else %}#94A3B8{% endif %};">
+                    <span style="color: {% if admin_roles_list.get('can_fetch_credentials') %}#16A34A{% else %}#EF4444{% endif %};">{% if admin_roles_list.get('can_fetch_credentials') %}✓{% else %}✗{% endif %}</span> Can Fetch API Credentials
+                </div>
+            {% endif %}
+        </div>
+
+        <h6 style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748B; margin-bottom: 12px; letter-spacing: 0.05em;">Active Whitelisted AWS Regions</h6>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
+            {% for reg in get_active_regions() %}
+            <span style="font-size: 11px; font-weight: 600; background: #F1F5F9; border: 1px solid var(--border); color: #475569; padding: 6px 12px; border-radius: 6px;">
+                ☁️ {{ reg }}
+            </span>
+            {% else %}
+            <span style="font-size: 12px; color: #94A3B8;">No active regions configured.</span>
+            {% endfor %}
+        </div>
+
+        <h6 style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748B; margin-bottom: 12px; letter-spacing: 0.05em;">Network Access Policies</h6>
+        <div style="font-size: 13px; color: #475569; line-height: 1.6;">
+            Admins bypass standard employee quotas. On login, the system automatically whitelists your IP for:
+            <ul style="margin: 6px 0 0 20px; padding: 0; color: #0F172A; list-style-type: disc;">
+                <li style="margin-bottom: 4px;">Nginx Web Logs Access</li>
+                <li style="margin-bottom: 4px;">Nginx Metrics Access</li>
+                <li style="margin-bottom: 4px;">HP Agent Port Whitelisting</li>
+                <li style="margin-bottom: 4px;">Ports <strong>22, 3306, 80, 443, 1890</strong> globally</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 28px; text-align: right;">
+            <button onclick="closeAccessProfileModal()" class="btn-primary" style="padding: 10px 24px; font-size: 13px; border-radius: 8px; color: white; border: none; cursor: pointer; font-weight: 600;">Dismiss</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

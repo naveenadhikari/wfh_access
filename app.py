@@ -48,16 +48,32 @@ from permissions import (
     has_any_permission, has_subadmin_access, parse_permissions,
 )
 
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip("'\"")
+                    os.environ[key] = val
+
+load_env_file()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 migrate_db()
 
 import requests
 
-SVRMETRICS_URL     = "http://localhost:6400"
-SVRMETRICS_API_KEY = "svrmetrics-api-key-change-this"
+SVRMETRICS_URL     = os.environ.get("SVRMETRICS_URL", "http://localhost:6400")
+SVRMETRICS_API_KEY = os.environ.get("SVRMETRICS_API_KEY", "svrmetrics-api-key-change-this")
 import jwt
-SSO_SECRET = "a1b2c34d5e6f7g8h9i0jklmnopqrstuvwx"  
+SSO_SECRET = os.environ.get("SSO_SECRET", "a1b2c34d5e6f7g8h9i0jklmnopqrstuvwx")  
 
 @app.route("/launch/svrmetrics")
 def launch_svrmetrics():
@@ -99,6 +115,7 @@ def inject_permission_helpers():
         "session_permissions": _session_permissions(),
         "has_perm": lambda name: _has_permission(name),
         "is_employee_portal": lambda: bool(session.get("employee_username")),
+        "get_active_regions": lambda: list(_get_global_regions().keys()),
     }
 
 
@@ -284,16 +301,6 @@ def login():
                 )
             except Exception:
                 pass
-
-            add_audit_entry(
-                admin_username=username,
-                target_user=username,
-                action="login",
-                details={
-                    "message": "Admin logged in"
-                },
-                ip_address=admin_ip
-            )
 
             flash("Logged in successfully.", "success")
             return redirect(url_for("dashboard"))
@@ -1111,7 +1118,6 @@ def allow_access():
 
 # Landing page
 
-# (Removed index function as / is now handled by login)
 
 
 if __name__ == "__main__":
