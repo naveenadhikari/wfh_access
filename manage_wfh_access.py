@@ -1,6 +1,22 @@
 import os
 import logging
 
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip("'\"")
+                    os.environ[key] = val
+
+load_env_file()
+
 from flask import Flask, request, jsonify
 from access_wfh_cfg import ACCESS_MANAGER_CONF
 import boto3
