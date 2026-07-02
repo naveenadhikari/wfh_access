@@ -1,8 +1,4 @@
 """
-db.py
------
-Sets up the sqlite database used by the admin panel.
-
 Tables:
   - admins                    : admin login accounts (username, password_hash, otp_seed)
   - audit_log                 : record of who created which user, when, with what access
@@ -11,8 +7,6 @@ Tables:
   - wfh_user_region_overrides  : per-user, per-region custom access (replaces overRiddenRegionAndCfg)
   - global_settings            : rarely-changing global config (regionAndCfg, webAccessConfig, etc.)
 
-Run this file directly to (re)create the database:
-    python3 db.py
 """
 
 import sqlite3
@@ -608,6 +602,73 @@ def get_all_ssh_key_status():
     conn.close()
     return status
 
+
+def get_user_provisioned_instances(username):
+    """Retrieve unique active EC2 instances a user has been provisioned on from audit log."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT action, details FROM audit_log WHERE target_user = ? AND action IN ('ec2_provision', 'ec2_revoke') ORDER BY id ASC",
+        (username,)
+    ).fetchall()
+    conn.close()
+    
+    instances = {}
+    for row in rows:
+        if row["details"]:
+            details = json.loads(row["details"])
+            instance_id = details.get("instance_id")
+            if not instance_id:
+                continue
+                
+            if row["action"] == "ec2_provision" and details.get("success", False):
+                instances[instance_id] = details
+            elif row["action"] == "ec2_revoke" and details.get("success", False):
+                instances.pop(instance_id, None)
+                
+    return list(instances.values())
+
+
+def get_all_active_ec2_provisions():
+    """Retrieve all active EC2 provisions across all users."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT target_user, action, details, timestamp FROM audit_log WHERE action IN ('ec2_provision', 'ec2_revoke') ORDER BY id ASC"
+    ).fetchall()
+    conn.close()
+    
+    # Structure: active_provisions[username][instance_id] = details
+    active_provisions = {}
+    
+    for row in rows:
+        target_user = row["target_user"]
+        if not target_user:
+            continue
+            
+        if row["details"]:
+            details = json.loads(row["details"])
+            instance_id = details.get("instance_id")
+            if not instance_id:
+                continue
+                
+            if target_user not in active_provisions:
+                active_provisions[target_user] = {}
+                
+            if row["action"] == "ec2_provision" and details.get("success", False):
+                # Add provision details + timestamp
+                details["provisioned_at"] = row["timestamp"]
+                details["username"] = target_user
+                active_provisions[target_user][instance_id] = details
+            elif row["action"] == "ec2_revoke" and details.get("success", False):
+                active_provisions[target_user].pop(instance_id, None)
+                
+    # Flatten out into a single list
+    flat_provisions = []
+    for user_provisions in active_provisions.values():
+        flat_provisions.extend(user_provisions.values())
+        
+    # Sort by timestamp descending
+    flat_provisions.sort(key=lambda x: x.get("provisioned_at", ""), reverse=True)
+    return flat_provisions
 
 if __name__ == "__main__":
     init_db()

@@ -1,5 +1,5 @@
 {% extends "admin_layout.html" %}
-{% block title %}AWS Region Management{% endblock %}
+{% block title %}AWS Management{% endblock %}
 {% block content %}
 
 <style>
@@ -144,53 +144,180 @@
     align-items: center;
     margin-bottom: 24px;
   }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+  .tab-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-main);
+  }
+  .tab-btn.active {
+    background: #0F172A;
+    color: white;
+  }
+  .tab-content {
+    display: none;
+  }
+  .tab-content.active {
+    display: block;
+  }
 </style>
 
 <div class="page-header">
   <div>
-    <h1 class="page-title" style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">AWS Region Management</h1>
+    <h1 class="page-title" style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">AWS Management</h1>
     <p class="text-muted" style="margin: 0; font-size: 14px;">Manage global AWS regions and default security groups.</p>
   </div>
   <button class="btn-dark-modern" onclick="openAddModal()">+ Add New Region</button>
 </div>
 
-<div class="region-card">
-  <table class="custom-table">
-    <thead>
-      <tr>
-        <th>AWS Region</th>
-        <th>Security Groups</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for region, cfg in regions.items() %}
-      <tr>
-        <td style="font-weight: 600; font-size: 14px;">{{ region }}</td>
-        <td>
-          {% for sg in cfg.get('securityGrpIds', []) %}
-          <span class="sg-tag">{{ sg }}</span>
+<div class="tabs">
+    <button class="tab-btn active" onclick="openTab(event, 'tab-regions')">Region Configuration</button>
+    <button class="tab-btn" onclick="openTab(event, 'tab-ec2')">EC2 Access Management</button>
+</div>
+
+<!-- Tab: Region Configuration -->
+<div id="tab-regions" class="tab-content active">
+    <div class="region-card">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>AWS Region</th>
+            <th>Security Groups</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for region, cfg in regions.items() %}
+          <tr>
+            <td style="font-weight: 600; font-size: 14px;">{{ region }}</td>
+            <td>
+              {% for sg in cfg.get('securityGrpIds', []) %}
+              <span class="sg-tag">{{ sg }}</span>
+              {% endfor %}
+              {% if not cfg.get('securityGrpIds') %}
+              <span class="text-muted small">No security groups defined.</span>
+              {% endif %}
+            </td>
+            <td style="width: 180px;">
+              <div style="display: flex; gap: 8px;">
+                <button class="btn-outline-dark-modern" onclick="openEditModal('{{ region }}', '{{ cfg.get('securityGrpIds', []) | join(', ') }}')">Edit SGs</button>
+                <form action="{{ url_for('delete_region', region=region) }}" method="POST" style="margin:0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete region {{ region }}? This will remove it from the global defaults, but user overrides will not be affected.', () => form.submit());">
+                  <button type="submit" class="btn-danger-custom">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3" class="text-center text-muted" style="padding: 32px;">No global regions configured.</td>
+          </tr>
           {% endfor %}
-          {% if not cfg.get('securityGrpIds') %}
-          <span class="text-muted small">No security groups defined.</span>
-          {% endif %}
-        </td>
-        <td style="width: 180px;">
-          <div style="display: flex; gap: 8px;">
-            <button class="btn-outline-dark-modern" onclick="openEditModal('{{ region }}', '{{ cfg.get('securityGrpIds', []) | join(', ') }}')">Edit SGs</button>
-            <form action="{{ url_for('delete_region', region=region) }}" method="POST" style="margin:0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete region {{ region }}? This will remove it from the global defaults, but user overrides will not be affected.', () => form.submit());">
-              <button type="submit" class="btn-danger-custom">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="3" class="text-center text-muted" style="padding: 32px;">No global regions configured.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        </tbody>
+      </table>
+    </div>
+</div>
+
+<!-- Tab: EC2 Access Management -->
+<div id="tab-ec2" class="tab-content">
+    
+    <!-- Provision New Access -->
+    <div class="region-card" style="margin-bottom: 32px; background: #F8FAFC; border: 1px solid #E2E8F0;">
+        <h4 style="margin-top: 0; margin-bottom: 16px; font-size: 16px; font-weight: 600;">Provision EC2 Access</h4>
+        <form action="/admin/provision-ec2-global" method="POST" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to provision this user on the selected EC2 instance?', () => form.submit());">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items: end;">
+                <div>
+                    <label class="form-label-custom">Select User</label>
+                    <select id="ec2_user_select" name="username" class="form-control-custom" onchange="checkUserSshKey()" required>
+                        <option value="">-- Select User --</option>
+                        {% for uname, user in users.items() %}
+                        <option value="{{ uname }}">{{ uname }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label-custom">AWS Region</label>
+                    <select id="ec2_region_select" name="region" class="form-control-custom" onchange="fetchEC2InstancesForProvision()" required>
+                        <option value="">-- Loading Regions... --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label-custom">Target Instance</label>
+                    <select id="ec2_instance_select" name="instance_id" class="form-control-custom" required>
+                        <option value="">-- Select Region First --</option>
+                    </select>
+                    <!-- Hidden inputs for instance data populated by JS -->
+                    <input type="hidden" id="ec2_instance_name" name="instance_name" value="">
+                    <input type="hidden" id="ec2_instance_ip" name="instance_ip" value="">
+                </div>
+                <div>
+                    <button type="submit" class="btn-dark-modern" id="provision_btn" disabled>Provision Access</button>
+                </div>
+            </div>
+            <div id="ssh_key_warning" style="display: none; padding: 12px; background: #FFF1F2; color: #E11D48; border: 1px solid #FFE4E6; border-radius: 6px; margin-top: 16px; font-size: 13px; font-weight: 500;">
+                ⚠️ This user has not uploaded an SSH public key. They must generate or upload a key in their Employee Dashboard before you can provision EC2 access.
+            </div>
+            <div id="ec2_loading_indicator" style="display: none; margin-top: 12px; font-size: 13px; color: #64748B;">
+                <span class="spinner" style="display:inline-block; width:12px; height:12px; border:2px solid #CBD5E1; border-top-color:#0F172A; border-radius:50%; animation: spin 1s linear infinite; margin-right:6px; vertical-align:middle;"></span> Fetching instances...
+            </div>
+        </form>
+    </div>
+
+    <!-- Active Provisions -->
+    <div class="region-card">
+        <h4 style="margin-top: 0; margin-bottom: 16px; font-size: 16px; font-weight: 600;">Active EC2 Provisions</h4>
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Instance Name</th>
+                    <th>Instance IP</th>
+                    <th>Region</th>
+                    <th>Provisioned At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for provision in active_provisions %}
+                <tr>
+                    <td style="font-weight: 600;">{{ provision.username }}</td>
+                    <td>{{ provision.instance_name }}</td>
+                    <td style="font-family: monospace;">{{ provision.instance_ip }}</td>
+                    <td><span class="sg-tag">{{ provision.region }}</span></td>
+                    <td style="font-size: 12px; color: #64748B;">{{ provision.provisioned_at }}</td>
+                    <td>
+                        <form action="/admin/revoke-ec2" method="POST" style="margin:0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to completely revoke {{ provision.username }}\'s access on {{ provision.instance_name }}? This will delete their Linux user account on the server.', () => form.submit());">
+                            <input type="hidden" name="username" value="{{ provision.username }}">
+                            <input type="hidden" name="instance_id" value="{{ provision.instance_id }}">
+                            <input type="hidden" name="instance_ip" value="{{ provision.instance_ip }}">
+                            <input type="hidden" name="instance_name" value="{{ provision.instance_name }}">
+                            <button type="submit" class="btn-danger-custom" style="padding: 4px 10px; font-size: 12px;">Revoke</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted" style="padding: 32px;">No active EC2 provisions found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Add Region Modal -->
@@ -246,6 +373,36 @@
 </div>
 
 <script>
+  function openTab(evt, tabId) {
+    let tabContents = document.getElementsByClassName("tab-content");
+    for (let i = 0; i < tabContents.length; i++) {
+        tabContents[i].classList.remove("active");
+    }
+    let tabBtns = document.getElementsByClassName("tab-btn");
+    for (let i = 0; i < tabBtns.length; i++) {
+        tabBtns[i].classList.remove("active");
+    }
+    document.getElementById(tabId).classList.add("active");
+    if(evt && evt.currentTarget) {
+        evt.currentTarget.classList.add("active");
+    } else {
+        // Find the button for this tab and activate it
+        let btn = document.querySelector(`button[onclick*="${tabId}"]`);
+        if(btn) btn.classList.add("active");
+    }
+    
+    // Save state to sessionStorage so it persists on reload
+    sessionStorage.setItem("activeAWSTab", tabId);
+  }
+
+  // Restore active tab on load
+  document.addEventListener("DOMContentLoaded", function() {
+      const activeTab = sessionStorage.getItem("activeAWSTab");
+      if (activeTab) {
+          openTab(null, activeTab);
+      }
+  });
+
   function openAddModal() {
     const modal = document.getElementById('addRegionModal');
     modal.style.display = 'flex';
@@ -269,6 +426,126 @@
       closeModals();
     }
   }
+
+  let instancesData = [];
+  let userHasSshKey = false;
+  let selectedInstanceValid = false;
+
+  function updateProvisionButton() {
+      const provisionBtn = document.getElementById("provision_btn");
+      provisionBtn.disabled = !(userHasSshKey && selectedInstanceValid);
+  }
+
+  function checkUserSshKey() {
+      const username = document.getElementById("ec2_user_select").value;
+      const warningDiv = document.getElementById("ssh_key_warning");
+      
+      userHasSshKey = false;
+      updateProvisionButton();
+
+      if (!username) {
+          warningDiv.style.display = "none";
+          return;
+      }
+
+      fetch(`/api/user-ssh-key-status/${username}`)
+          .then(r => r.json())
+          .then(data => {
+              if (data.has_key) {
+                  userHasSshKey = true;
+                  warningDiv.style.display = "none";
+              } else {
+                  userHasSshKey = false;
+                  warningDiv.style.display = "block";
+              }
+              updateProvisionButton();
+          })
+          .catch(err => console.error("Error checking SSH key:", err));
+  }
+
+  function fetchEC2InstancesForProvision() {
+    const region = document.getElementById("ec2_region_select").value;
+    const instanceSelect = document.getElementById("ec2_instance_select");
+    const provisionBtn = document.getElementById("provision_btn");
+    const loadingIndicator = document.getElementById("ec2_loading_indicator");
+    const instanceNameInput = document.getElementById("ec2_instance_name");
+    const instanceIpInput = document.getElementById("ec2_instance_ip");
+
+    instanceSelect.innerHTML = '<option value="">-- Select Instance --</option>';
+    instanceNameInput.value = "";
+    instanceIpInput.value = "";
+    provisionBtn.disabled = true;
+
+    if (!region) return;
+
+    loadingIndicator.style.display = "block";
+    instanceSelect.disabled = true;
+
+    fetch(`/api/ec2-instances/${encodeURIComponent(region)}`)
+      .then(r => r.json())
+      .then(data => {
+        loadingIndicator.style.display = "none";
+        instanceSelect.disabled = false;
+
+        if (data.error) {
+          alert("Error fetching instances: " + data.error);
+          return;
+        }
+
+        instancesData = data.instances;
+        if (instancesData.length === 0) {
+          instanceSelect.innerHTML = '<option value="">No instances found in this region</option>';
+          return;
+        }
+
+        instancesData.forEach(inst => {
+          let opt = document.createElement("option");
+          opt.value = inst.id;
+          opt.textContent = `${inst.state === 'running' ? '🟢' : '🔴'} ${inst.name} (${inst.id}) - IP: ${inst.public_ip || 'None'}`;
+          if (!inst.public_ip || inst.state !== "running") {
+             opt.disabled = true;
+          }
+          instanceSelect.appendChild(opt);
+        });
+
+        instanceSelect.onchange = function() {
+            const selectedId = this.value;
+            const inst = instancesData.find(i => i.id === selectedId);
+            if (inst) {
+                instanceNameInput.value = inst.name;
+                instanceIpInput.value = inst.public_ip;
+                selectedInstanceValid = true;
+            } else {
+                selectedInstanceValid = false;
+            }
+            updateProvisionButton();
+        };
+      })
+      .catch(err => {
+        loadingIndicator.style.display = "none";
+        instanceSelect.disabled = false;
+        alert("Network error fetching instances.");
+      });
+  }
+
+  // Load friendly region names on page load
+  document.addEventListener("DOMContentLoaded", function() {
+      const select = document.getElementById("ec2_region_select");
+      if (!select) return;
+
+      fetch("/api/ec2-regions")
+          .then(r => r.json())
+          .then(data => {
+              select.innerHTML = '<option value="">-- Select Region --</option>';
+              data.regions.forEach(region => {
+                  const opt = document.createElement("option");
+                  opt.value = region.id || region;
+                  opt.textContent = region.name ? `${region.id} (${region.name})` : region;
+                  select.appendChild(opt);
+              });
+          })
+          .catch(err => console.error("Failed to load regions:", err));
+  });
 </script>
 
 {% endblock %}

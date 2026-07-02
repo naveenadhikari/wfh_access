@@ -267,6 +267,20 @@
     </div>
 </div>
 
+
+
+<!--filter-->
+<div style="margin-bottom: 16px;">
+    <input 
+        type="text" 
+        id="userSearchInput"
+        placeholder="Search by username..."
+        oninput="filterUsers(this.value)"
+        style="width: 100%; max-width: 400px; padding: 10px 16px; border: 1px solid var(--border); 
+               border-radius: 8px; font-size: 14px; outline: none; background: white; color: var(--text-main);"
+    >
+</div>
+
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
 <div style="margin-bottom: 24px;">
@@ -423,50 +437,78 @@
 
     </div>
 </div>
-
 <script>
     let usersCurrentPage = 1;
     const usersPerPage = 10;
-    
+    let filteredRows = [];
+
+    function getVisibleRows() {
+        const tbody = document.querySelector('.custom-table tbody');
+        const mainRows = Array.from(tbody.querySelectorAll('.main-row'));
+        const query = document.getElementById('userSearchInput').value.toLowerCase().trim();
+
+        if (!query) {
+            return mainRows;
+        }
+
+        return mainRows.filter(row => {
+            const username = row.querySelector('.user-name').textContent.toLowerCase();
+            return username.includes(query);
+        });
+    }
+
     function renderUsersPagination() {
         const tbody = document.querySelector('.custom-table tbody');
-        const mainRows = tbody.querySelectorAll('.main-row');
-        const totalItems = mainRows.length;
-        const totalPages = Math.ceil(totalItems / usersPerPage) || 1;
-        
-        if (usersCurrentPage > totalPages) usersCurrentPage = totalPages;
-        if (usersCurrentPage < 1) usersCurrentPage = 1;
-        
-        const startIndex = (usersCurrentPage - 1) * usersPerPage;
-        const endIndex = startIndex + usersPerPage;
-        
-        mainRows.forEach((row, index) => {
+        const allMainRows = Array.from(tbody.querySelectorAll('.main-row'));
+
+        // Hide all rows and their expanded rows first
+        allMainRows.forEach(row => {
+            row.style.display = 'none';
             const detailsRow = row.nextElementSibling;
-            if (index >= startIndex && index < endIndex) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-                if (detailsRow) {
-                    detailsRow.classList.remove('show');
-                    row.classList.remove('open');
-                }
+            if (detailsRow && detailsRow.classList.contains('expanded-row')) {
+                detailsRow.style.display = 'none';
+                detailsRow.classList.remove('show');
+                row.classList.remove('open');
             }
         });
-        
+
+        // Get only filtered rows
+        const visibleRows = getVisibleRows();
+        const totalItems = visibleRows.length;
+        const totalPages = Math.ceil(totalItems / usersPerPage) || 1;
+
+        if (usersCurrentPage > totalPages) usersCurrentPage = totalPages;
+        if (usersCurrentPage < 1) usersCurrentPage = 1;
+
+        const startIndex = (usersCurrentPage - 1) * usersPerPage;
+        const endIndex = startIndex + usersPerPage;
+
+        // Show only rows for current page
+        visibleRows.forEach((row, index) => {
+            if (index >= startIndex && index < endIndex) {
+                row.style.display = '';
+            }
+        });
+
         const endDisplay = Math.min(endIndex, totalItems);
         const startDisplay = totalItems === 0 ? 0 : startIndex + 1;
         document.getElementById('usersPageInfo').textContent = `${startDisplay}-${endDisplay} of ${totalItems}`;
-        
+
         document.getElementById('usersPrevBtn').disabled = usersCurrentPage === 1;
         document.getElementById('usersNextBtn').disabled = usersCurrentPage === totalPages || totalPages === 0;
     }
-    
+
     function changeUsersPage(delta) {
         usersCurrentPage += delta;
         renderUsersPagination();
     }
 
-    document.addEventListener("DOMContentLoaded", function() {
+    function filterUsers(query) {
+        usersCurrentPage = 1;
+        renderUsersPagination();
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
         renderUsersPagination();
     });
 
@@ -474,9 +516,11 @@
         const detailsRow = document.getElementById('details-' + id);
         if (detailsRow.classList.contains('show')) {
             detailsRow.classList.remove('show');
+            detailsRow.style.display = 'none';
             rowElement.classList.remove('open');
         } else {
             detailsRow.classList.add('show');
+            detailsRow.style.display = 'table-row';
             rowElement.classList.add('open');
         }
     }

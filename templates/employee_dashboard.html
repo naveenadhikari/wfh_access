@@ -43,16 +43,17 @@
             <h3 class="quick-actions-title">Quick Actions</h3>
             <div class="quick-actions-buttons">
                 {% if has_subadmin_access %}
-                    {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') or employee_permissions.get('can_view_users_and_logs') %}
-                    <button type="button" class="btn-action btn-action-primary" onclick="openModal('mgmt-modal')">
-                        🔧 Management Tools
-                    </button>
-                    {% endif %}
-                    {% if employee_permissions.get('can_fetch_credentials') %}
-                    <button type="button" class="btn-action btn-action-primary" onclick="openModal('fetch-modal')">
-                        🔑 Fetch Credentials
-                    </button>
-                    {% endif %}
+                {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') or
+                employee_permissions.get('can_view_users_and_logs') %}
+                <button type="button" class="btn-action btn-action-primary" onclick="openModal('mgmt-modal')">
+                    🔧 Management Tools
+                </button>
+                {% endif %}
+                {% if employee_permissions.get('can_fetch_credentials') %}
+                <button type="button" class="btn-action btn-action-primary" onclick="openModal('fetch-modal')">
+                    🔑 Fetch Credentials
+                </button>
+                {% endif %}
                 {% endif %}
                 <button type="button" class="btn-action" onclick="openModal('perms-modal')">
                     🛡️ Access Permissions
@@ -62,6 +63,74 @@
                 </a>
             </div>
         </div>
+
+        {% if provisioned_instances %}
+        <!-- Section 2: Provisioned EC2 Instances & OTP Setup -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Provisioned EC2 Instances & Access Guide</h3>
+            </div>
+            <div class="card-body">
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 20px;">
+                    You have been provisioned on the following EC2 instances. To connect, you will need your <strong>Private SSH Key</strong> and your <strong>Google Authenticator OTP</strong> code.
+                </p>
+
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="openTab(event, 'tab-ssh')">Connect via SSH</button>
+                    <button class="tab-btn" onclick="openTab(event, 'tab-qr')">Authenticator QR Code</button>
+                </div>
+
+                <!-- Connect via SSH Tab -->
+                <div id="tab-ssh" class="tab-content active">
+                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 15px; font-weight: 600; color: var(--text-main);">SSH Access Commands</h4>
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        {% for instance in provisioned_instances %}
+                        <div style="background: white; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <strong style="font-size: 14px; color: #0F172A;">{{ instance.get('instance_name', 'Unknown') }}</strong>
+                                <span style="font-size: 12px; color: #64748B; background: #F1F5F9; padding: 2px 8px; border-radius: 12px;">{{ instance.get('region', 'Unknown Region') }}</span>
+                            </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">1. First, secure your downloaded private key (run this once):</p>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                            <code id="chmod-cmd-{{ loop.index }}" style="flex: 1; padding: 10px; background: #1E293B; color: #E2E8F0; border-radius: 6px; font-size: 13px;">chmod 600 &lt;path-to-private-key&gt;</code>
+                            <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('chmod-cmd-{{ loop.index }}').innerText); alert('chmod command copied!');">Copy</button>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">2. Then connect via SSH:</p>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <code id="ssh-cmd-{{ loop.index }}" style="flex: 1; padding: 10px; background: #1E293B; color: #E2E8F0; border-radius: 6px; font-size: 13px;">ssh -i &lt;path-to-private-key&gt; {{ username }}@{{ instance.get('instance_ip', 'IP_ADDRESS') }}</code>
+                            <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('ssh-cmd-{{ loop.index }}').innerText); alert('SSH command copied!');">Copy</button>
+                        </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Authenticator QR Code Tab -->
+                <div id="tab-qr" class="tab-content">
+                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 15px; font-weight: 600; color: var(--text-main);">Setup Two-Factor Authentication</h4>
+                    <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 20px;">
+                        Scan this QR code using Google Authenticator or Authy to configure your OTP token.
+                    </p>
+                    <div style="background: #F8FAFC; border: 1px solid var(--border); padding: 24px; border-radius: 8px; text-align: center; margin-bottom: 24px;">
+                        {% if qr_code_b64 %}
+                        <img src="data:image/png;base64,{{ qr_code_b64 }}" alt="OTP QR Code" style="background: white; padding: 12px; border-radius: 8px; border: 1px solid var(--border); max-width: 200px;">
+                        {% else %}
+                        <div style="padding: 24px; color: #64748B;">No QR code available. Please ask an admin to reset your OTP seed.</div>
+                        {% endif %}
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: white; border: 1px solid var(--border); border-radius: 8px;">
+                        <div>
+                            <strong style="display: block; font-size: 12px; color: #64748B; margin-bottom: 4px;">Manual Entry Key:</strong>
+                            <code style="font-size: 14px; font-weight: 700; color: #0F172A; letter-spacing: 1px;">{{ user_info.get('otpSeed', 'Not generated') }}</code>
+                        </div>
+                        {% if user_info.get('otpSeed') %}
+                        <button class="btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="navigator.clipboard.writeText('{{ user_info.get('otpSeed') }}'); alert('OTP Key copied!');">Copy Key</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Section 1: Access Status -->
         {% if access_result %}
@@ -117,10 +186,11 @@
                             </td>
                             <td>{{ key.created_at }}</td>
                             <td>
-                                 <form action="{{ url_for('delete_ssh_key', key_id=key.id) }}" method="POST"
-                                     style="margin: 0;" onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete this key?', () => form.submit());">
-                                     <button type="submit" class="btn-danger">Delete</button>
-                                 </form>
+                                <form action="{{ url_for('delete_ssh_key', key_id=key.id) }}" method="POST"
+                                    style="margin: 0;"
+                                    onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to delete this key?', () => form.submit());">
+                                    <button type="submit" class="btn-danger">Delete</button>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -196,7 +266,8 @@
                         style="margin-top: 0; margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--text-main);">
                         2. Connect to the server</h4>
                     <p style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">Use the
-                        <code>-i</code> flag to specify your private key file.</p>
+                        <code>-i</code> flag to specify your private key file.
+                    </p>
                     <div
                         style="background-color: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; margin-bottom: 16px;">
                         ssh -i ~/Downloads/id_ed25519 {{ username }}@claude-server.yourdomain.com
@@ -238,12 +309,15 @@
                     <ul
                         style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 16px; padding-left: 20px;">
                         <li style="margin-bottom: 4px;">Open PuTTY and go to <strong>Session</strong>. Enter
-                            <code>claude-server.yourdomain.com</code> in the Host Name box.</li>
+                            <code>claude-server.yourdomain.com</code> in the Host Name box.
+                        </li>
                         <li style="margin-bottom: 4px;">Navigate to <strong>Connection</strong> &gt;
                             <strong>Data</strong> and enter <code>{{ username }}</code> in the "Auto-login username"
-                            field.</li>
+                            field.
+                        </li>
                         <li style="margin-bottom: 4px;">Navigate to <strong>Connection</strong> &gt;
-                            <strong>SSH</strong> &gt; <strong>Auth</strong> &gt; <strong>Credentials</strong>.</li>
+                            <strong>SSH</strong> &gt; <strong>Auth</strong> &gt; <strong>Credentials</strong>.
+                        </li>
                         <li style="margin-bottom: 4px;">Browse and select your newly converted <code>.ppk</code> file in
                             the "Private key file for authentication" field.</li>
                         <li style="margin-bottom: 4px;">Go back to <strong>Session</strong>, give it a name under "Saved
@@ -294,7 +368,8 @@
                     {% if user_info.get('portsToOpen') %}
                     <div class="permission-item" style="grid-column: span 2;">
                         <span class="permission-label">Global Ports</span>
-                        <span class="badge badge-enabled" style="width: auto;">{{ user_info.get('portsToOpen') | join(', ') }}</span>
+                        <span class="badge badge-enabled" style="width: auto;">{{ user_info.get('portsToOpen') | join(',
+                            ') }}</span>
                     </div>
                     {% endif %}
 
@@ -322,16 +397,21 @@
             <div class="modal-body">
                 <div class="mgmt-links">
                     {% if employee_permissions.get('can_add_user') or employee_permissions.get('can_manage_users') %}
-                    <a href="{{ url_for('add_user') }}" class="mgmt-link">Add User<span>Create a new employee account</span></a>
+                    <a href="{{ url_for('add_user') }}" class="mgmt-link">Add User<span>Create a new employee
+                            account</span></a>
                     {% endif %}
-                    {% if employee_permissions.get('can_view_users_and_logs') or employee_permissions.get('can_manage_users') %}
-                    <a href="{{ url_for('view_users') }}" class="mgmt-link">View Users<span>Browse and manage employees</span></a>
+                    {% if employee_permissions.get('can_view_users_and_logs') or
+                    employee_permissions.get('can_manage_users') %}
+                    <a href="{{ url_for('view_users') }}" class="mgmt-link">View Users<span>Browse and manage
+                            employees</span></a>
                     {% endif %}
                     {% if employee_permissions.get('can_view_users_and_logs') %}
-                    <a href="{{ url_for('view_audit_log') }}" class="mgmt-link">Audit Log<span>Recent management activity</span></a>
+                    <a href="{{ url_for('view_audit_log') }}" class="mgmt-link">Audit Log<span>Recent management
+                            activity</span></a>
                     {% endif %}
                     {% if employee_permissions.get('can_manage_users') %}
-                    <a href="{{ url_for('view_regions') }}" class="mgmt-link">AWS Regions<span>Manage region configuration</span></a>
+                    <a href="{{ url_for('view_regions') }}" class="mgmt-link">AWS Regions<span>Manage region
+                            configuration</span></a>
                     {% endif %}
                 </div>
             </div>
@@ -347,16 +427,21 @@
                 <button type="button" class="modal-close" onclick="closeModal('fetch-modal')">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0;">Enter an employee's username to retrieve their OTP seed and SSH keys.</p>
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0;">Enter an employee's username to
+                    retrieve their OTP seed and SSH keys.</p>
                 <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                    <input type="text" id="fetch-username" class="form-control" placeholder="Employee username" style="min-height: auto; flex: 1;">
+                    <input type="text" id="fetch-username" class="form-control" placeholder="Employee username"
+                        style="min-height: auto; flex: 1;">
                     <button onclick="fetchCredentials()" class="btn-primary" id="fetch-btn" type="button">Fetch</button>
                 </div>
-                <div id="fetch-results" style="display: none; background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+                <div id="fetch-results"
+                    style="display: none; background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
                     <h4 style="margin: 0 0 8px; font-size: 14px;">OTP Seed</h4>
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-                        <code id="res-otp" style="flex:1; background: white; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; word-break: break-all;"></code>
-                        <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('res-otp').innerText)">Copy</button>
+                        <code id="res-otp"
+                            style="flex:1; background: white; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; word-break: break-all;"></code>
+                        <button class="btn-secondary" style="padding: 8px 12px;"
+                            onclick="navigator.clipboard.writeText(document.getElementById('res-otp').innerText)">Copy</button>
                     </div>
                     <h4 style="margin: 0 0 8px; font-size: 14px;">SSH Keys</h4>
                     <div id="res-ssh" style="max-height: 150px; overflow-y: auto;"></div>
@@ -365,15 +450,21 @@
 
                 <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
                     <h4 style="margin: 0 0 8px; font-size: 14px;">Your Script API Token</h4>
-                    <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">Use this token to authenticate scripts for the credentials API.</p>
-                    <div style="background: #F8FAFC; border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                        <code id="api-token" data-token="{{ api_token if api_token else '' }}" style="font-size: 13px; word-break: break-all;">{{ api_token if api_token else "No token generated yet" }}</code>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">Use this token to authenticate
+                        scripts for the credentials API.</p>
+                    <div
+                        style="background: #F8FAFC; border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <code id="api-token" data-token="{{ api_token if api_token else '' }}"
+                            style="font-size: 13px; word-break: break-all;">{{ api_token if api_token else "No token generated yet" }}</code>
                         {% if api_token %}
-                        <button class="btn-secondary" style="padding: 8px 12px; flex-shrink: 0;" onclick="navigator.clipboard.writeText(document.getElementById('api-token').innerText)">Copy</button>
+                        <button class="btn-secondary" style="padding: 8px 12px; flex-shrink: 0;"
+                            onclick="navigator.clipboard.writeText(document.getElementById('api-token').innerText)">Copy</button>
                         {% endif %}
                     </div>
-                    <form action="{{ url_for('generate_employee_api_token_route') }}" method="POST" style="margin-top: 12px;">
-                        <button type="submit" class="btn-secondary">{% if api_token %}Regenerate{% else %}Generate{% endif %} API Token</button>
+                    <form action="{{ url_for('generate_employee_api_token_route') }}" method="POST"
+                        style="margin-top: 12px;">
+                        <button type="submit" class="btn-secondary">{% if api_token %}Regenerate{% else %}Generate{%
+                            endif %} API Token</button>
                     </form>
                 </div>
             </div>
@@ -411,11 +502,20 @@
         }
 
         function openTab(event, tabId) {
-            const contents = document.querySelectorAll('.tab-content');
-            contents.forEach(content => content.classList.remove('active'));
+            const cardBody = event.currentTarget.closest('.card-body');
+            if (cardBody) {
+                const contents = cardBody.querySelectorAll('.tab-content');
+                contents.forEach(content => content.classList.remove('active'));
 
-            const buttons = document.querySelectorAll('.tab-btn');
-            buttons.forEach(btn => btn.classList.remove('active'));
+                const buttons = cardBody.querySelectorAll('.tab-btn');
+                buttons.forEach(btn => btn.classList.remove('active'));
+            } else {
+                const contents = document.querySelectorAll('.tab-content');
+                contents.forEach(content => content.classList.remove('active'));
+
+                const buttons = document.querySelectorAll('.tab-btn');
+                buttons.forEach(btn => btn.classList.remove('active'));
+            }
 
             document.getElementById(tabId).classList.add('active');
             event.currentTarget.classList.add('active');
@@ -481,43 +581,49 @@
     </script>
 
     <!-- Custom Confirmation Modal -->
-    <div id="customConfirmModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 99999;">
-        <div style="background: white; border-radius: 12px; width: 100%; max-width: 420px; padding: 32px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); text-align: center; font-family: 'Inter', sans-serif;">
+    <div id="customConfirmModal"
+        style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 99999;">
+        <div
+            style="background: white; border-radius: 12px; width: 100%; max-width: 420px; padding: 32px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); text-align: center; font-family: 'Inter', sans-serif;">
             <div style="font-size: 48px; margin-bottom: 20px; line-height: 1;">⚠️</div>
             <h5 style="font-size: 18px; font-weight: 700; color: #0F172A; margin: 0 0 10px 0;">Are you sure?</h5>
-            <p id="customConfirmMessage" style="font-size: 14px; color: #64748B; margin: 0 0 28px 0; line-height: 1.5;"></p>
+            <p id="customConfirmMessage" style="font-size: 14px; color: #64748B; margin: 0 0 28px 0; line-height: 1.5;">
+            </p>
             <div style="display: flex; justify-content: center; gap: 16px;">
-                <button id="customConfirmCancelBtn" type="button" class="btn-secondary" style="padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid #CBD5E1; color: #475569; transition: all 0.2s ease;">Cancel</button>
-                <button id="customConfirmOkBtn" type="button" class="btn-danger" style="padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid #E11D48;">Yes, Proceed</button>
+                <button id="customConfirmCancelBtn" type="button" class="btn-secondary"
+                    style="padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid #CBD5E1; color: #475569; transition: all 0.2s ease;">Cancel</button>
+                <button id="customConfirmOkBtn" type="button" class="btn-danger"
+                    style="padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid #E11D48;">Yes,
+                    Proceed</button>
             </div>
         </div>
     </div>
 
     <script>
-    let confirmCallback = null;
+        let confirmCallback = null;
 
-    function showConfirm(message, callback) {
-        document.getElementById('customConfirmMessage').textContent = message;
-        confirmCallback = callback;
-        document.getElementById('customConfirmModal').style.display = 'flex';
-    }
-
-    function closeConfirmModal(proceed) {
-        document.getElementById('customConfirmModal').style.display = 'none';
-        if (proceed && confirmCallback) {
-            confirmCallback();
+        function showConfirm(message, callback) {
+            document.getElementById('customConfirmMessage').textContent = message;
+            confirmCallback = callback;
+            document.getElementById('customConfirmModal').style.display = 'flex';
         }
-        confirmCallback = null;
-    }
 
-    document.getElementById('customConfirmCancelBtn').addEventListener('click', () => closeConfirmModal(false));
-    document.getElementById('customConfirmOkBtn').addEventListener('click', () => closeConfirmModal(true));
-
-    document.getElementById('customConfirmModal').addEventListener('click', function(event) {
-        if (event.target === this) {
-            closeConfirmModal(false);
+        function closeConfirmModal(proceed) {
+            document.getElementById('customConfirmModal').style.display = 'none';
+            if (proceed && confirmCallback) {
+                confirmCallback();
+            }
+            confirmCallback = null;
         }
-    });
+
+        document.getElementById('customConfirmCancelBtn').addEventListener('click', () => closeConfirmModal(false));
+        document.getElementById('customConfirmOkBtn').addEventListener('click', () => closeConfirmModal(true));
+
+        document.getElementById('customConfirmModal').addEventListener('click', function (event) {
+            if (event.target === this) {
+                closeConfirmModal(false);
+            }
+        });
     </script>
 </body>
 

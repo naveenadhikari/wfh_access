@@ -12,7 +12,7 @@ Routes:
   POST     /admin/delete-user/<u> - delete a user
   GET      /admin/audit-log       - view audit log
   GET/POST /employee/dashboard    - employee dashboard (SSH key; access granted at login)
-  GET/POST /request-access        - redirects to /login (POST kept for compatibility)
+
   GET      /admin/user/<u>/ssh-key - admin view/copy user SSH key
   POST     /allow-access          - legacy curl endpoint
 """
@@ -28,17 +28,25 @@ from functools import wraps
 import datetime
 import qrcode
 import pyotp
+
+import requests
+import jwt
+
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
-from auth import verify_admin, verify_wfh_user, hash_password, check_password, verify_otp_with_seed, generate_otp_seed
+from ec2_helper import list_regions, list_instances_in_region
+from ec2_provision import provision_user_on_instance
+
+from auth import verify_admin, verify_wfh_user, hash_password, check_password, generate_otp_seed
 from db import (
     get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key,
     delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin,
     update_admin_permissions, generate_admin_api_token, get_admin_by_api_token, delete_admin,
     get_global_setting, set_global_setting, get_wfh_user, get_employee_by_api_token, get_all_wfh_users,
-    generate_employee_api_token, update_employee_permissions,
+    generate_employee_api_token, update_employee_permissions, get_all_active_ec2_provisions,
 )
 from config_writer import add_user_to_config, user_exists, list_users, get_access_cfg
 from manage_wfh_access import grant_authorized_access
@@ -68,11 +76,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 migrate_db()
 
-import requests
 
 SVRMETRICS_URL     = os.environ.get("SVRMETRICS_URL", "http://localhost:6400")
 SVRMETRICS_API_KEY = os.environ.get("SVRMETRICS_API_KEY", "svrmetrics-api-key-change-this")
-import jwt
+
 SSO_SECRET = os.environ.get("SSO_SECRET", "a1b2c34d5e6f7g8h9i0jklmnopqrstuvwx")  
 
 @app.route("/launch/svrmetrics")
@@ -106,8 +113,6 @@ def launch_svrmetrics():
     return redirect(f"{SVRMETRICS_URL}/?token={token}")
 
 
-
-#>>>>>>>
 @app.context_processor
 def inject_permission_helpers():
     return {
@@ -117,6 +122,7 @@ def inject_permission_helpers():
         "is_employee_portal": lambda: bool(session.get("employee_username")),
         "get_active_regions": lambda: list(_get_global_regions().keys()),
     }
+
 
 
 # Helpers
@@ -201,6 +207,12 @@ def _employee_dashboard_context(username, access_result=None):
     db_user = get_wfh_user(username) or {}
     perms = db_user.get("admin_permissions") or {}
     ssh_keys = get_user_ssh_keys(username)
+    from db import get_user_provisioned_instances
+    provisioned_instances = get_user_provisioned_instances(username)
+    
+    otp_seed = user_info.get("otpSeed")
+    qr_code_b64 = generate_qr_code_b64(otp_seed, username) if otp_seed else None
+    
     return {
         "username": username,
         "ssh_keys": ssh_keys,
@@ -209,15 +221,15 @@ def _employee_dashboard_context(username, access_result=None):
         "employee_permissions": perms,
         "has_subadmin_access": has_subadmin_access(perms),
         "api_token": db_user.get("api_token"),
+        "provisioned_instances": provisioned_instances,
+        "qr_code_b64": qr_code_b64,
     }
 
 
 def _get_global_regions():
     """Region → security group map for admin user forms."""
     regions = get_access_cfg().get("regionAndCfg") or {}
-    if not regions:
-        from access_wfh_cfg import ACCESS_MANAGER_CONF
-        regions = ACCESS_MANAGER_CONF.get("regionAndCfg", {})
+    
     return regions
 
 
@@ -435,7 +447,19 @@ def view_users():
 @require_any_permission("can_manage_users")
 def view_regions():
     regions = _get_global_regions()
-    return render_template("regions.html", regions=regions)
+    users = list_users()
+    
+    # Filter out admins from the users list for provisioning
+    try:
+        all_admins = {adm["username"] for adm in get_all_admins()}
+        for adm_user in all_admins:
+            users.pop(adm_user, None)
+    except Exception:
+        pass
+    users.pop("admin", None)
+    
+    active_provisions = get_all_active_ec2_provisions()
+    return render_template("regions.html", regions=regions, users=users, active_provisions=active_provisions)
 
 @app.route("/admin/regions/add", methods=["POST"])
 @require_any_permission("can_manage_users")
@@ -503,21 +527,66 @@ def update_region():
 @require_any_permission("can_manage_users")
 def delete_region(region):
     regions = _get_global_regions()
-    if region in regions:
-        del regions[region]
-        set_global_setting("regionAndCfg", regions)
+    if region not in regions:
+        flash(f"Region {region} not found.", "error")
+        return redirect(url_for("view_regions"))
         
-        add_audit_entry(
-            admin_username=_current_actor(),
-            target_user="SYSTEM",
-            action="delete_region",
-            details={"region": region},
+    del regions[region]
+    set_global_setting("regionAndCfg", regions)
+    
+    add_audit_entry(
+        admin_username=_current_actor(),
+        target_user="SYSTEM",
+        action="delete_region",
+        details={"region": region},
         ip_address=_client_ip()
     )
-        flash(f"Region {region} deleted successfully.", "success")
-    else:
-        flash(f"Region {region} not found.", "error")
-        
+    
+    flash(f"Region {region} deleted successfully.", "success")
+    return redirect(url_for("view_regions"))
+
+
+@app.route("/admin/revoke-ec2", methods=["POST"])
+@require_any_permission("can_manage_users")
+def revoke_ec2():
+    username = request.form.get("username")
+    instance_ip = request.form.get("instance_ip")
+    instance_id = request.form.get("instance_id")
+    instance_name = request.form.get("instance_name")
+
+    if not username or not instance_ip:
+        flash("Missing user or instance IP for revocation.", "error")
+        return redirect(url_for("view_regions"))
+
+    try:
+        from ec2_provision import revoke_user_on_instance
+        success, error_msg = revoke_user_on_instance(public_ip=instance_ip, username=username)
+
+        details = {
+            "instance_id": instance_id,
+            "instance_name": instance_name,
+            "instance_ip": instance_ip,
+            "success": success,
+        }
+        if error_msg:
+            details["error"] = error_msg
+
+        add_audit_entry(
+            admin_username=_current_actor(),
+            target_user=username,
+            action="ec2_revoke",
+            details=details,
+            ip_address=_client_ip()
+        )
+
+        if success:
+            flash(f"✅ Access revoked for '{username}' on {instance_name} ({instance_ip}).", "success")
+        else:
+            flash(f"⚠️ Revocation partially failed for '{username}'. Error: {error_msg}", "error")
+
+    except Exception as e:
+        flash(f"Revocation error: {str(e)}", "error")
+
     return redirect(url_for("view_regions"))
 
 
@@ -729,6 +798,15 @@ def edit_user(username):
                 "securityGrpIds": sgs,
                 "portsToOpen": ports
             }
+        cidr_preference = request.form.get("cidr_preference", "/32")
+
+        conn = get_db()
+        conn.execute(
+        "UPDATE wfh_users SET cidr_preference=? WHERE username=?",
+            (cidr_preference, username)
+                )
+        conn.commit()
+        conn.close()
 
         # Update via config writer (which updates db)
         user_entry = {
@@ -1036,84 +1114,210 @@ def api_get_credentials(username):
     return jsonify(response_data)
 
 
-# Legacy request-access URL (redirects to unified employee portal)
-@app.route("/request-access", methods=["GET", "POST"])
-def request_access():
-    if request.method == "GET":
-        if session.get("employee_username"):
-            return redirect(url_for("employee_dashboard"))
-        if session.get("admin_username"):
-            return redirect(url_for("dashboard"))
-        return redirect(url_for("login"))
-
-    username = request.form.get("username", "").strip().lower().replace(" ", "_")
-    password = request.form.get("password", "")
-    otp = request.form.get("otp", "").strip()
-
-    if verify_wfh_user(username, password, otp):
-        session.pop("admin_username", None)
-        session.pop("admin_role", None)
-        session.pop("admin_permissions", None)
-        session["employee_username"] = username
-        db_user = get_wfh_user(username) or {}
-        session["employee_permissions"] = db_user.get("admin_permissions") or {}
-        access_result = _grant_employee_access(username)
-        session["employee_access_result"] = access_result
-        return redirect(url_for("employee_dashboard"))
-
-    flash("Invalid username, password, or OTP.", "error")
-    return redirect(url_for("login"))
+# ── ROUTE 1 — List EC2 instances for a region ──
+@app.route("/api/ec2-instances/<region>")
+def api_ec2_instances(region):
+    if not session.get("admin_username"):
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        from ec2_helper import list_instances_in_region
+        instances = list_instances_in_region(region)
+        return jsonify({"instances": instances})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# Legacy curl endpoint (backward compatibility)
-@app.route("/allow-access", methods=["POST"])
-def allow_access():
-    import logging
-    logger = logging.getLogger("")
+# ── ROUTE 2 — Provision EC2 access for a user ──
+@app.route("/admin/provision-ec2/<username>", methods=["POST"])
+@require_any_permission("can_manage_users")
+def provision_ec2(username):
+    instance_id   = request.form.get("instance_id", "").strip()
+    instance_ip   = request.form.get("instance_ip", "").strip()
+    region        = request.form.get("region", "").strip()
+    instance_name = request.form.get("instance_name", instance_id)
 
-    response = {"status": False}
-    ip_to_allow = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if not instance_id or not instance_ip:
+        flash("Please select an EC2 instance.", "error")
+        return redirect(url_for("edit_user", username=username))
+
+    # Get employee's SSH public key from DB
+    ssh_keys = get_user_ssh_keys(username)
+    if not ssh_keys:
+        flash(
+            f"No SSH key found for '{username}'. "
+            "Employee must add their SSH public key first from their dashboard.",
+            "error"
+        )
+        return redirect(url_for("edit_user", username=username))
+
+    ssh_public_key = ssh_keys[0]["ssh_public_key"]
+
+    # Get employee's OTP seed from DB
+    db_user = get_wfh_user(username)
+    if not db_user:
+        flash(f"User '{username}' not found.", "error")
+        return redirect(url_for("edit_user", username=username))
+
+    otp_seed = db_user.get("otp_seed")
+    if not otp_seed:
+        flash(f"No OTP seed found for '{username}'.", "error")
+        return redirect(url_for("edit_user", username=username))
 
     try:
-        req_body = request.json
-        passw = req_body["password"]
-        emp_name = req_body["name"]
-        user_sent_otp = req_body.get("otp")
-        emp_name = emp_name.lower().replace(" ", "_")
-    except Exception as e:
-        logger.exception("EXC: {}".format(e))
-        return jsonify(response)
+        from ec2_provision import provision_user_on_instance
+        import os
 
-    cfg = get_access_cfg()
-    error = "UnAuthorized.."
-    status = False
+        result = provision_user_on_instance(
+            public_ip=instance_ip,
+            username=username,
+            ssh_public_key=ssh_public_key,
+            otp_seed=otp_seed,
+        )
 
-    if emp_name in cfg["ALLOWED_USR_IDENTITIES"]:
-        if cfg["ALLOWED_USR_IDENTITIES"][emp_name]["password"] == passw:
-            if verify_otp_with_seed(user_sent_otp, cfg["ALLOWED_USR_IDENTITIES"][emp_name]["otpSeed"]):
-                status = grant_authorized_access(emp_name, ip_to_allow)
-                if status:
-                    add_audit_entry(
-                        admin_username="SYSTEM",
-                        target_user=emp_name,
-                        action="api_login",
-                        details={"message": "User requested access via API/curl"},
-                        ip_address=ip_to_allow
-                    )
-            else:
-                logger.error("Invalid OTP")
+        add_audit_entry(
+            admin_username=_current_actor(),
+            target_user=username,
+            action="ec2_provision",
+            details={
+                "instance_id":   instance_id,
+                "instance_name": instance_name,
+                "instance_ip":   instance_ip,
+                "region":        region,
+                "success":       result["success"],
+                "steps":         {k: v for k, v in result.items() if k != "error"},
+                "error":         result.get("error"),
+            },
+            ip_address=_client_ip()
+        )
+
+        if result["success"]:
+            flash(
+                f"✅ '{username}' provisioned on {instance_name} ({instance_ip}) successfully. "
+                "They can now SSH using their key + OTP.",
+                "success"
+            )
         else:
-            logger.error("Invalid Password")
-    else:
-        logger.error("NonExistent User")
+            flash(
+                f"⚠️ Provisioning partially failed for '{username}' on {instance_name}. "
+                f"Error: {result.get('error', 'See audit log for details.')}",
+                "error"
+            )
 
-    response["status"] = status
-    if not status:
-        response["error"] = error
-    else:
-        response["info"] = "Welcome {}".format(emp_name)
+    except Exception as e:
+        flash(f"Provisioning error: {str(e)}", "error")
 
-    return jsonify(response)
+    return redirect(url_for("edit_user", username=username))
+
+
+@app.route("/admin/provision-ec2-global", methods=["POST"])
+@require_any_permission("can_manage_users")
+def provision_ec2_global():
+    username      = request.form.get("username", "").strip()
+    instance_id   = request.form.get("instance_id", "").strip()
+    instance_ip   = request.form.get("instance_ip", "").strip()
+    region        = request.form.get("region", "").strip()
+    instance_name = request.form.get("instance_name", instance_id)
+
+    if not username or not instance_id or not instance_ip:
+        flash("Please select a user and an EC2 instance.", "error")
+        return redirect(url_for("view_regions"))
+
+    # Get employee's SSH public key from DB
+    ssh_keys = get_user_ssh_keys(username)
+    if not ssh_keys:
+        flash(
+            f"No SSH key found for '{username}'. "
+            "Employee must add their SSH public key first from their dashboard.",
+            "error"
+        )
+        return redirect(url_for("view_regions"))
+    
+    ssh_public_key = ssh_keys[0]["ssh_public_key"]
+
+    db_user = get_wfh_user(username)
+    if not db_user:
+        flash(f"User '{username}' not found.", "error")
+        return redirect(url_for("view_regions"))
+
+    otp_seed = db_user.get("otp_seed")
+    if not otp_seed:
+        flash(f"No OTP seed found for '{username}'.", "error")
+        return redirect(url_for("view_regions"))
+
+    try:
+        from ec2_provision import provision_user_on_instance
+        import os
+
+        result = provision_user_on_instance(
+            public_ip=instance_ip,
+            username=username,
+            ssh_public_key=ssh_public_key,
+            otp_seed=otp_seed,
+        )
+
+        add_audit_entry(
+            admin_username=_current_actor(),
+            target_user=username,
+            action="ec2_provision",
+            details={
+                "instance_id":   instance_id,
+                "instance_name": instance_name,
+                "instance_ip":   instance_ip,
+                "region":        region,
+                "success":       result["success"],
+                "steps":         {k: v for k, v in result.items() if k != "error"},
+                "error":         result.get("error"),
+            },
+            ip_address=_client_ip()
+        )
+
+        if result["success"]:
+            flash(
+                f"✅ '{username}' provisioned on {instance_name} ({instance_ip}) successfully. ",
+                "success"
+            )
+        else:
+            flash(
+                f"⚠️ Provisioning partially failed for '{username}' on {instance_name}. "
+                f"Error: {result.get('error', 'See audit log for details.')}",
+                "error"
+            )
+
+    except Exception as e:
+        flash(f"Provisioning error: {str(e)}", "error")
+
+    return redirect(url_for("view_regions"))
+
+
+
+# ── ROUTE 3 — List available AWS regions ──
+@app.route("/api/ec2-regions")
+def api_ec2_regions():
+    if not session.get("admin_username"):
+        return jsonify({"error": "Unauthorized"}), 401
+    from ec2_helper import list_regions
+    return jsonify({"regions": list_regions()})
+
+
+# ── ROUTE 4 — Check if user has SSH key on file ──
+@app.route("/api/user-ssh-key-status/<username>")
+def api_user_ssh_key_status(username):
+
+    print(f"DEBUG ssh-key-status: session={dict(session)}")
+    if not session.get("admin_username"):
+        return jsonify({"error": "Unauthorized"}), 401
+    keys = get_user_ssh_keys(username)
+    if keys:
+        return jsonify({
+            "has_key": True,
+            "key_name": keys[0]["key_name"],
+            "created_at": keys[0]["created_at"],
+            "key_count": len(keys)
+        })
+    return jsonify({"has_key": False})
+
+
+
 
 
 # Landing page
