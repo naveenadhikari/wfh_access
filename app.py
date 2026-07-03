@@ -24,6 +24,7 @@ import base64
 import secrets
 import string
 from functools import wraps
+import threading
 
 import datetime
 import qrcode
@@ -38,7 +39,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
 from ec2_helper import list_regions, list_instances_in_region
-from ec2_provision import provision_user_on_instance
+from ec2_provision import provision_user_on_instance, ALLOWED_LINUX_GROUPS
 
 
 from auth import verify_admin, verify_wfh_user, hash_password, check_password, generate_otp_seed
@@ -126,6 +127,14 @@ def inject_permission_helpers():
 
 
 
+def async_post(url, json_data=None, headers=None, timeout=5):
+    def task():
+        try:
+            requests.post(url, json=json_data, headers=headers, timeout=timeout)
+        except Exception:
+            pass
+    threading.Thread(target=task, daemon=True).start()
+
 # Helpers
 def _session_permissions():
     if session.get("admin_username"):
@@ -194,11 +203,12 @@ def _client_ip():
 
 def _grant_employee_access(username):
     ip_to_allow = _client_ip()
-    access_result = grant_authorized_access(username, ip_to_allow)
-    return (
-        f"Access granted for {username} (IP {ip_to_allow}):\n"
-        + json.dumps(access_result, indent=2)
-    )
+    def background_task():
+        grant_authorized_access(username, ip_to_allow)
+    
+    threading.Thread(target=background_task, daemon=True).start()
+    
+    return f"Access is being provisioned in the background for {username} (IP {ip_to_allow}). This may take a few moments."
 
 
 def _employee_dashboard_context(username, access_result=None):
@@ -301,16 +311,15 @@ def login():
             )
 
             try:
-                requests.post(
+                async_post(
                     f"{SVRMETRICS_URL}/api/whitelist-ip",
-                    json={
+                    json_data={
                         "ip": admin_ip,
                         "emp_name": username
                     },
                     headers={
                         "X-API-Key": SVRMETRICS_API_KEY
-                    },
-                    timeout=5
+                    }
                 )
             except Exception:
                 pass
@@ -343,16 +352,15 @@ def login():
                     f"DEBUG — calling svrmetrics with IP: {employee_ip}"
                 )
 
-                requests.post(
+                async_post(
                     f"{SVRMETRICS_URL}/api/whitelist-ip",
-                    json={
+                    json_data={
                         "ip": employee_ip,
                         "emp_name": employee_username
                     },
                     headers={
                         "X-API-Key": SVRMETRICS_API_KEY
-                    },
-                    timeout=5
+                    }
                 )
             except Exception:
                 pass
@@ -392,11 +400,10 @@ def logout():
     emp_name = session.get("employee_username") or session.get("admin_username")
     if emp_name:
         try:
-            requests.post(
+            async_post(
                 f"{SVRMETRICS_URL}/api/remove-ip",
-                json={"emp_name": emp_name},
-                headers={"X-API-Key": SVRMETRICS_API_KEY},
-                timeout=5
+                json_data={"emp_name": emp_name},
+                headers={"X-API-Key": SVRMETRICS_API_KEY}
             )
         except Exception:
             pass
@@ -551,42 +558,166 @@ def delete_region(region):
 @require_any_permission("can_manage_users")
 def revoke_ec2():
     username = request.form.get("username")
-    instance_ip = request.form.get("instance_ip")
+    instance_ip = request.form.get("instance_ip")      # stored IP — may be stale
     instance_id = request.form.get("instance_id")
     instance_name = request.form.get("instance_name")
+    region = request.form.get("region", "").strip()
 
-    if not username or not instance_ip:
-        flash("Missing user or instance IP for revocation.", "error")
+    if not username or not instance_id:
+        flash("Missing user or instance for revocation.", "error")
+        return redirect(url_for("view_regions"))
+
+    # The stored instance_ip can go stale if the instance was stopped/started
+    # since it was provisioned (public IPs change on restart unless the
+    # instance has an Elastic IP). Re-fetch the current IP from AWS instead
+    # of trusting what's saved in the DB.
+    current_ip = instance_ip
+    if region:
+        try:
+            from ec2_helper import list_instances_in_region
+            live_instances = list_instances_in_region(region)
+            match = next((i for i in live_instances if i.get("id") == instance_id), None)
+
+            if match is None:
+                flash(f"Instance {instance_name} ({instance_id}) no longer exists in {region}. "
+                      f"It may have been terminated — you may need to clean up this record manually.", "error")
+                return redirect(url_for("view_regions"))
+
+            if match.get("state") != "running":
+                flash(f"Instance {instance_name} is currently '{match.get('state')}', not running. "
+                      f"Start it first, then revoke.", "error")
+                return redirect(url_for("view_regions"))
+
+            if match.get("public_ip"):
+                current_ip = match["public_ip"]
+        except Exception as e:
+            # Fall back to the stored IP if the live lookup itself fails —
+            # better to try the old value than to block the action entirely.
+            print(f"[WARN] Could not refresh IP for {instance_id}: {e}")
+
+    if not current_ip:
+        flash(f"No reachable IP found for {instance_name}. Is the instance running?", "error")
         return redirect(url_for("view_regions"))
 
     try:
         from ec2_provision import revoke_user_on_instance
-        success, error_msg = revoke_user_on_instance(public_ip=instance_ip, username=username)
+        
+        actor = _current_actor()
+        client_ip = _client_ip()
+        
+        def revoke_task():
+            success, error_msg = revoke_user_on_instance(public_ip=current_ip, username=username)
 
-        details = {
-            "instance_id": instance_id,
-            "instance_name": instance_name,
-            "instance_ip": instance_ip,
-            "success": success,
-        }
-        if error_msg:
-            details["error"] = error_msg
+            details = {
+                "instance_id": instance_id,
+                "instance_name": instance_name,
+                "instance_ip": current_ip,
+                "success": success,
+            }
+            if error_msg:
+                details["error"] = error_msg
 
-        add_audit_entry(
-            admin_username=_current_actor(),
-            target_user=username,
-            action="ec2_revoke",
-            details=details,
-            ip_address=_client_ip()
-        )
-
-        if success:
-            flash(f"✅ Access revoked for '{username}' on {instance_name} ({instance_ip}).", "success")
-        else:
-            flash(f"⚠️ Revocation partially failed for '{username}'. Error: {error_msg}", "error")
+            add_audit_entry(
+                admin_username=actor,
+                target_user=username,
+                action="ec2_revoke",
+                details=details,
+                ip_address=client_ip
+            )
+            
+        threading.Thread(target=revoke_task, daemon=True).start()
+        flash(f"Revocation initiated in the background for '{username}' on {instance_name} ({current_ip}). Check audit logs later for status.", "success")
 
     except Exception as e:
         flash(f"Revocation error: {str(e)}", "error")
+
+    return redirect(url_for("view_regions"))
+
+
+@app.route("/admin/update-groups", methods=["POST"])
+@require_any_permission("can_manage_users")
+def update_groups():
+    """
+    Edit an existing provision's Linux group membership (add/remove groups)
+    without a full re-provision — no SSH key / OTP / sshd changes, just
+    reconciles group membership on the target instance.
+    """
+    username      = request.form.get("username")
+    instance_ip   = request.form.get("instance_ip")      # stored IP — may be stale
+    instance_id   = request.form.get("instance_id")
+    instance_name = request.form.get("instance_name")
+    region        = request.form.get("region", "").strip()
+    selected_groups = [g for g in request.form.getlist("linux_groups") if g in ALLOWED_LINUX_GROUPS]
+
+    if not username or not instance_id:
+        flash("Missing user or instance for group update.", "error")
+        return redirect(url_for("view_regions"))
+
+    # Same stale-IP problem as revoke — re-fetch the live IP before connecting.
+    current_ip = instance_ip
+    if region:
+        try:
+            from ec2_helper import list_instances_in_region
+            live_instances = list_instances_in_region(region)
+            match = next((i for i in live_instances if i.get("id") == instance_id), None)
+
+            if match is None:
+                flash(f"Instance {instance_name} ({instance_id}) no longer exists in {region}.", "error")
+                return redirect(url_for("view_regions"))
+
+            if match.get("state") != "running":
+                flash(f"Instance {instance_name} is currently '{match.get('state')}', not running. "
+                      f"Start it first, then edit groups.", "error")
+                return redirect(url_for("view_regions"))
+
+            if match.get("public_ip"):
+                current_ip = match["public_ip"]
+        except Exception as e:
+            print(f"[WARN] Could not refresh IP for {instance_id}: {e}")
+
+    if not current_ip:
+        flash(f"No reachable IP found for {instance_name}. Is the instance running?", "error")
+        return redirect(url_for("view_regions"))
+
+    try:
+        from ec2_provision import update_user_groups_on_instance
+        
+        actor = _current_actor()
+        client_ip = _client_ip()
+        
+        def update_task():
+            success, result = update_user_groups_on_instance(
+                public_ip=current_ip,
+                username=username,
+                groups=selected_groups,
+            )
+
+            details = {
+                "instance_id": instance_id,
+                "instance_name": instance_name,
+                "instance_ip": current_ip,
+                "region": region,
+                "linux_groups": selected_groups,
+                "success": success,
+            }
+            if isinstance(result, dict):
+                details["change_result"] = result
+            else:
+                details["error"] = result
+
+            add_audit_entry(
+                admin_username=actor,
+                target_user=username,
+                action="ec2_update_groups",
+                details=details,
+                ip_address=client_ip
+            )
+            
+        threading.Thread(target=update_task, daemon=True).start()
+        flash(f"Groups update initiated in the background for '{username}' on {instance_name}. Check audit logs later for status.", "success")
+
+    except Exception as e:
+        flash(f"Group update error: {str(e)}", "error")
 
     return redirect(url_for("view_regions"))
 
@@ -1135,6 +1266,7 @@ def provision_ec2(username):
     instance_ip   = request.form.get("instance_ip", "").strip()
     region        = request.form.get("region", "").strip()
     instance_name = request.form.get("instance_name", instance_id)
+    selected_groups = [g for g in request.form.getlist("linux_groups") if g in ALLOWED_LINUX_GROUPS]
 
     if not instance_id or not instance_ip:
         flash("Please select an EC2 instance.", "error")
@@ -1172,6 +1304,7 @@ def provision_ec2(username):
             username=username,
             ssh_public_key=ssh_public_key,
             otp_seed=otp_seed,
+            groups=selected_groups,
         )
 
         add_audit_entry(
@@ -1183,6 +1316,7 @@ def provision_ec2(username):
                 "instance_name": instance_name,
                 "instance_ip":   instance_ip,
                 "region":        region,
+                "linux_groups":  selected_groups,
                 "success":       result["success"],
                 "steps":         {k: v for k, v in result.items() if k != "error"},
                 "error":         result.get("error"),
@@ -1217,6 +1351,8 @@ def provision_ec2_global():
     instance_ip   = request.form.get("instance_ip", "").strip()
     region        = request.form.get("region", "").strip()
     instance_name = request.form.get("instance_name", instance_id)
+
+    selected_groups = [g for g in request.form.getlist("linux_groups") if g in ALLOWED_LINUX_GROUPS]
 
     if not username or not instance_id or not instance_ip:
         flash("Please select a user and an EC2 instance.", "error")
@@ -1253,6 +1389,7 @@ def provision_ec2_global():
             username=username,
             ssh_public_key=ssh_public_key,
             otp_seed=otp_seed,
+            groups=selected_groups,
         )
 
         add_audit_entry(
@@ -1264,6 +1401,7 @@ def provision_ec2_global():
                 "instance_name": instance_name,
                 "instance_ip":   instance_ip,
                 "region":        region,
+                "linux_groups":  selected_groups,
                 "success":       result["success"],
                 "steps":         {k: v for k, v in result.items() if k != "error"},
                 "error":         result.get("error"),

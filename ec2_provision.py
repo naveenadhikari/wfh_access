@@ -39,10 +39,16 @@ def connect_to_instance(public_ip, key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH
     return client
 
 
-def run_cmd(client, command, use_sudo=True):
-    """Run a command on the remote server. Returns (exit_code, stdout, stderr)."""
+def run_cmd(client, command, use_sudo=True, timeout=20):
+    """Run a command on the remote server. Returns (exit_code, stdout, stderr).
+
+    Raises socket.timeout if the command doesn't finish within `timeout` seconds,
+    instead of blocking forever (e.g. instance became unreachable mid-command,
+    or a command like `userdel` is stuck waiting on something remote).
+    """
     full_cmd = f"sudo {command}" if use_sudo else command
-    stdin, stdout, stderr = client.exec_command(full_cmd)
+    stdin, stdout, stderr = client.exec_command(full_cmd, timeout=timeout)
+    stdout.channel.settimeout(timeout)
     exit_code = stdout.channel.recv_exit_status()
     out = stdout.read().decode().strip()
     err = stderr.read().decode().strip()
@@ -53,19 +59,64 @@ def run_cmd(client, command, use_sudo=True):
 # STEP 1 — CREATE LINUX USER
 # ─────────────────────────────────────────────
 
-def create_linux_user(client, username):
+# Whitelist of groups that can ever be passed to useradd/usermod for a
+# provisioned employee. Group names flow into a shell command over SSH, so
+# NEVER accept arbitrary/free-text group names here — only ever pass values
+# that have already been checked against this set.
+ALLOWED_LINUX_GROUPS = {"adm", "www-data", "claude-users", "sudo"}
+
+
+def _sanitize_groups(groups):
+    """Keep only whitelisted, safe group names. Silently drops anything else."""
+    if not groups:
+        return []
+    return [g for g in groups if g in ALLOWED_LINUX_GROUPS]
+
+
+def create_linux_user(client, username, groups=None):
+    groups = _sanitize_groups(groups)
+    group_csv = ",".join(groups)
+
     exit_code, out, err = run_cmd(client, f"id {username}", use_sudo=False)
     if exit_code == 0:
         print(f"  [SKIP] User '{username}' already exists. Enforcing /bin/bash shell.")
         run_cmd(client, f"usermod -s /bin/bash {username}")
+        if groups:
+            exit_code, out, err = run_cmd(client, f"usermod -a -G {group_csv} {username}")
+            if exit_code != 0:
+                print(f"  [FAIL] Could not update groups for '{username}': {err}")
+                return False
+            print(f"  [OK] Groups ensured for '{username}': {group_csv}")
         return True
 
-    exit_code, out, err = run_cmd(client, f"useradd -m -s /bin/bash {username}")
+    group_arg = f" -G {group_csv}" if groups else ""
+    exit_code, out, err = run_cmd(client, f"useradd -m -s /bin/bash{group_arg} {username}")
     if exit_code != 0:
         print(f"  [FAIL] Could not create user: {err}")
         return False
 
-    print(f"  [OK] Created Linux user '{username}'")
+    print(f"  [OK] Created Linux user '{username}'" + (f" with groups: {group_csv}" if groups else ""))
+    return True
+
+
+def set_initial_password(client, username):
+   
+    payload = f"{username}:{username}\n"
+    tmp_path = f"/tmp/{username}_chpasswd_tmp"
+
+    sftp = client.open_sftp()
+    with sftp.file(tmp_path, "w") as f:
+        f.write(payload)
+    sftp.close()
+
+    exit_code, out, err = run_cmd(client, f"bash -c 'chpasswd < {tmp_path}'")
+    run_cmd(client, f"rm -f {tmp_path}")
+
+    if exit_code != 0:
+        print(f"  [FAIL] Could not set initial password for '{username}': {err}")
+        return False
+
+    print(f"  [OK] Initial password set for '{username}' (password == username)")
     return True
 
 
@@ -242,15 +293,22 @@ def configure_instance_for_otp(client, master_user="ubuntu"):
 # ─────────────────────────────────────────────
 
 def provision_user_on_instance(public_ip, username, ssh_public_key, otp_seed,
-                                key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH_USER):
+                                key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH_USER,
+                                groups=None, set_password=True):
     """
     Full provisioning flow.
     Call this from your Flask route — pass the instance IP from the dropdown selection.
+    `groups` is an optional list of Linux group names (must be in ALLOWED_LINUX_GROUPS)
+    the new user should also be added to, e.g. ["adm", "www-data", "claude-users"].
+    `set_password`: if True (default), sets the account's initial Unix password
+    to the username itself, matching the original bash script's behavior.
+    This is intentionally weak/guessable — it exists only as a legacy fallback.
     Returns a dict with status of each step.
     """
     result = {
         "success": False,
         "linux_user_created": False,
+        "password_set": None,
         "ssh_key_added": False,
         "otp_configured": False,
         "instance_configured": False,
@@ -263,10 +321,16 @@ def provision_user_on_instance(public_ip, username, ssh_public_key, otp_seed,
         print("  [OK] Connected\n")
 
         print(f"Step 1: Creating Linux user '{username}'...")
-        result["linux_user_created"] = create_linux_user(client, username)
+        result["linux_user_created"] = create_linux_user(client, username, groups=groups)
         if not result["linux_user_created"]:
             client.close()
             return result
+
+        if set_password:
+            print(f"\nStep 1b: Setting initial password for '{username}'...")
+            # Non-blocking — if this fails, provisioning continues since the
+            # intended login path is SSH key + OTP, not the password.
+            result["password_set"] = set_initial_password(client, username)
 
         print(f"\nStep 2: Adding SSH public key...")
         result["ssh_key_added"] = add_ssh_key(client, username, ssh_public_key)
@@ -300,64 +364,172 @@ def provision_user_on_instance(public_ip, username, ssh_public_key, otp_seed,
         return result
 
 
-def revoke_user_on_instance(public_ip, username, key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH_USER):
+def revoke_user_on_instance(public_ip, username, key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH_USER,
+                             connect_timeout=15, cmd_timeout=20):
     """
     Revoke a user's access on an EC2 instance by deleting their Linux account and home directory.
     Returns (success_bool, error_msg).
+
+    connect_timeout: max seconds to wait for the SSH connection itself (instance unreachable/stopped).
+    cmd_timeout: max seconds to wait for each remote command to finish.
     """
+    import socket
+
+    client = None
+
+    # ── Phase 1: connect ──
     try:
         print(f"\nRevoking access for '{username}' on {public_ip}...")
-        client = connect_to_instance(public_ip, key_path, ssh_user)
-        
-        # Kill any active sessions for the user to ensure userdel works
-        run_cmd(client, f"pkill -u {username}")
-        
+        client = connect_to_instance(public_ip, key_path, ssh_user, timeout=connect_timeout)
+    except (socket.timeout, TimeoutError):
+        msg = (
+            f"Timed out connecting to {public_ip} within {connect_timeout}s. "
+            "The instance is likely stopped/terminated, its public IP changed after a "
+            "restart, or its security group no longer allows SSH (port 22) from this admin server."
+        )
+        print(f"\n[ERROR revoking] {msg}")
+        return False, msg
+    except paramiko.AuthenticationException:
+        msg = "SSH authentication to the instance failed (check the master key/user)."
+        print(f"\n[ERROR revoking] {msg}")
+        return False, msg
+    except Exception as e:
+        print(f"\n[ERROR revoking] Connection failed: {e}")
+        return False, f"Connection failed: {e}"
+
+    # ── Phase 2: run commands ──
+    try:
+        # Kill any active sessions for the user to ensure userdel works.
+        # Don't fail the whole revoke if this step errors — pkill returns
+        # non-zero if the user has no running processes, which is normal.
+        try:
+            run_cmd(client, f"pkill -u {username}", timeout=cmd_timeout)
+        except (socket.timeout, TimeoutError):
+            print(f"  [WARN] pkill step timed out after {cmd_timeout}s (continuing)")
+        except Exception as e:
+            print(f"  [WARN] pkill step failed (continuing): {e}")
+
         # Delete user and their home directory (-r removes home dir + mail spool)
-        exit_code, out, err = run_cmd(client, f"userdel -r {username}")
-        client.close()
-        
+        exit_code, out, err = run_cmd(client, f"userdel -r {username}", timeout=cmd_timeout)
+
         if exit_code == 0 or "does not exist" in err.lower():
             print(f"  [OK] Access revoked for '{username}'")
             return True, None
+        elif "currently used by process" in err.lower() or "user busy" in err.lower():
+            # One retry after a harder kill and a short pause.
+            print(f"  [INFO] User has active processes, retrying with SIGKILL: {err}")
+            run_cmd(client, f"pkill -9 -u {username}", timeout=cmd_timeout)
+            run_cmd(client, "sleep 2", use_sudo=False, timeout=cmd_timeout)
+            exit_code, out, err = run_cmd(client, f"userdel -r {username}", timeout=cmd_timeout)
+            if exit_code == 0:
+                print(f"  [OK] Access revoked for '{username}' (after force kill)")
+                return True, None
+            print(f"  [FAIL] Still could not revoke user after force kill: {err}")
+            return False, f"User '{username}' still has running/logged-in sessions on the instance. Ask them to log out and try again."
         else:
             print(f"  [FAIL] Could not revoke user: {err}")
             return False, err
-            
+
+    except (socket.timeout, TimeoutError):
+        msg = (
+            f"Connected to {public_ip} successfully, but a command (pkill/userdel) took longer "
+            f"than {cmd_timeout}s to respond. This usually means the instance is under heavy load, "
+            "or something on it (e.g. a slow-to-delete home directory) is stuck."
+        )
+        print(f"\n[ERROR revoking] {msg}")
+        return False, msg
     except Exception as e:
         print(f"\n[ERROR revoking] {e}")
         return False, str(e)
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────
-# MANUAL TEST
+# EDIT GROUPS — reconcile a user's group membership after the fact
 # ─────────────────────────────────────────────
-if __name__ == "__main__":
-    import pyotp
-    TEST_INSTANCE_IP = "3.0.18.89"
-    TEST_USERNAME      = "testemployee"
-    TEST_SSH_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDhctS6Ha1BTdhUoexkD/suLU4/dDQt3XN8NUqa5HHkkCCTxP4IsdC/uP/leuSuciRS29WMz+FqiQJHy8OiZMLw4ZGrG922l+98hd+JLUBVHnpdWe6ZYHv2/o/ZXLcZno1v0vb+RmqpM5UojbCzG0jx7hq1Iu6vWL5odNO5ZcF2sycf+3DCvdRsZaj9zI5rEnbJa8fbsNqtgFOTIs1oQBs7+sfEQueWiZ9qPOBnYNJa+zhAEpaTbTxpAQvTerVsjSkv7oTzWQftmCjhJBr5D5s/A3iOKoIvWZNxCqXFErYQ1IR8yo+xUpKhFA2k8YbBgXhM9ElJV7A43Jt039feS+4XA2Rd4VDUoUsJTM1/rx89MYl9hCC+CCBZfKVQxy0dsyXUUgRukaMIsxEsFx+MDLbpVNid5O+wayXfAIOQIP1gr4UvoADStmAkTe6eVr/WiQp6QENM0LTxn6n9PxV1aYDHwtbCjdWnexna+o4MLJJb6UtqZ2lGX4oQzv5XhLIZBdPKi2vASEjsZDDoc9kVPyO0r+ikP+wGmHbE+fLShj/TE64YtOZbHC2IG6C/NeFJlr+Z8ZXZ2/iQNhwmgG3RS4bRrsT+dvVGQID1+B9B/9lAAMvB4nNOwhGZ+iS+xVFVhakV3qrtwLIzs/NkGxoFYXvwetb26dmJ+M0yfl8aiWOPvw== naveen@INT214Naveen"
-    TEST_OTP_SEED      = pyotp.random_base32()
 
-    print("="*60)
-    print("EC2 PROVISIONING TEST")
-    print(f"Target:   {TEST_INSTANCE_IP}")
-    print(f"User:     {TEST_USERNAME}")
-    print(f"OTP seed: {TEST_OTP_SEED}")
-    print("="*60)
+def _reconcile_groups(client, username, desired_groups):
+    """
+    Make the user's membership in ALLOWED_LINUX_GROUPS match `desired_groups`
+    exactly — adds any allowed group that's missing, removes any allowed
+    group that's no longer wanted. Groups outside ALLOWED_LINUX_GROUPS
+    (e.g. the user's own primary group) are never touched.
 
-    result = provision_user_on_instance(
-        public_ip=TEST_INSTANCE_IP,
-        username=TEST_USERNAME,
-        ssh_public_key=TEST_SSH_PUBLIC_KEY,
-        otp_seed=TEST_OTP_SEED,
-    )
+    Returns (success_bool, details_dict) where details_dict has
+    "added", "removed", and "failed" lists.
+    """
+    desired = set(_sanitize_groups(desired_groups))
 
-    print("\n" + "="*60)
-    print("RESULT:", result)
-    print("="*60)
+    exit_code, out, err = run_cmd(client, f"id -nG {username}", use_sudo=False)
+    if exit_code != 0:
+        return False, {"added": [], "removed": [], "failed": [], "error": f"Could not read current groups: {err}"}
 
-    if result["success"]:
-        print(f"\nTest login:")
-        print(f"  ssh -i /tmp/test_employee_key {TEST_USERNAME}@{TEST_INSTANCE_IP}")
-        print(f"\nOTP code right now:")
-        print(f"  {pyotp.TOTP(TEST_OTP_SEED).now()}")
+    current = set(out.split())
+    to_add = sorted(desired - current)
+    to_remove = sorted((current & ALLOWED_LINUX_GROUPS) - desired)
+
+    details = {"added": [], "removed": [], "failed": []}
+
+    for grp in to_add:
+        exit_code, out, err = run_cmd(client, f"usermod -a -G {grp} {username}")
+        if exit_code == 0:
+            details["added"].append(grp)
+        else:
+            details["failed"].append({"group": grp, "action": "add", "error": err})
+
+    for grp in to_remove:
+        exit_code, out, err = run_cmd(client, f"gpasswd -d {username} {grp}")
+        if exit_code == 0:
+            details["removed"].append(grp)
+        else:
+            details["failed"].append({"group": grp, "action": "remove", "error": err})
+
+    success = len(details["failed"]) == 0
+    return success, details
+
+
+def update_user_groups_on_instance(public_ip, username, groups,
+                                     key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH_USER,
+                                     connect_timeout=15):
+    """
+    Connect to an instance and reconcile a user's Linux group membership to
+    exactly match `groups` (a list from ALLOWED_LINUX_GROUPS). Use this for
+    an admin editing an existing provision's privileges without a full
+    re-provision (no SSH key / OTP / sshd changes — just group membership).
+
+    Returns (success_bool, details_dict_or_error_message).
+    """
+    import socket
+
+    client = None
+    try:
+        client = connect_to_instance(public_ip, key_path, ssh_user, timeout=connect_timeout)
+    except (socket.timeout, TimeoutError):
+        return False, f"Timed out connecting to {public_ip} within {connect_timeout}s."
+    except paramiko.AuthenticationException:
+        return False, "SSH authentication to the instance failed (check the master key/user)."
+    except Exception as e:
+        return False, f"Connection failed: {e}"
+
+    try:
+        exit_code, out, err = run_cmd(client, f"id {username}", use_sudo=False)
+        if exit_code != 0:
+            return False, f"User '{username}' does not exist on this instance."
+
+        success, details = _reconcile_groups(client, username, groups)
+        return success, details
+    except (socket.timeout, TimeoutError):
+        return False, "Connected, but a command timed out while updating groups."
+    except Exception as e:
+        return False, str(e)
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass

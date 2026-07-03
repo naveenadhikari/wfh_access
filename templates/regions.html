@@ -269,7 +269,7 @@
     <h4 style="margin-top: 0; margin-bottom: 16px; font-size: 16px; font-weight: 600;">Provision EC2 Access</h4>
     <form action="/admin/provision-ec2-global" method="POST"
       onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to provision this user on the selected EC2 instance?', () => form.submit());">
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items: end;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1.9fr auto; gap: 16px; align-items: end;">
         <div>
           <label class="form-label-custom">Select User</label>
           <select id="ec2_user_select" name="username" class="form-control-custom"
@@ -296,6 +296,28 @@
           <input type="hidden" id="ec2_instance_name" name="instance_name" value="">
           <input type="hidden" id="ec2_instance_ip" name="instance_ip" value="">
         </div>
+
+        <!-- Linux Groups selection (NEW) -->
+        <div>
+          <label class="form-label-custom">Linux Groups</label>
+          <div style="display:flex; gap:14px; padding:10px 0; flex-wrap:wrap; align-items:center;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#334155; font-weight:500; cursor:pointer;">
+              <input type="checkbox" name="linux_groups" value="adm" checked> adm
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#334155; font-weight:500; cursor:pointer;">
+              <input type="checkbox" name="linux_groups" value="www-data" checked> www-data
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#334155; font-weight:500; cursor:pointer;">
+              <input type="checkbox" name="linux_groups" value="claude-users"> claude-users
+            </label>
+            <span style="width:1px; height:16px; background:#E2E8F0;"></span>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#E11D48; font-weight:600; cursor:pointer;"
+              title="Grants full root access via sudo. Only enable if this user genuinely needs it.">
+              <input type="checkbox" name="linux_groups" value="sudo"> ⚠️ sudo
+            </label>
+          </div>
+        </div>
+
         <div>
           <button type="submit" class="btn-dark-modern" id="provision_btn" disabled>Provision Access</button>
         </div>
@@ -339,6 +361,7 @@
                 <th>Instance Name</th>
                 <th>Instance IP</th>
                 <th>Region</th>
+                <th>Groups</th>
                 <th>Provisioned At</th>
                 <th>Actions</th>
               </tr>
@@ -349,17 +372,37 @@
                 <td>{{ provision.instance_name }}</td>
                 <td style="font-family: monospace;">{{ provision.instance_ip }}</td>
                 <td><span class="sg-tag">{{ provision.region }}</span></td>
+                <td>
+                  {% for grp in provision.get('linux_groups', []) %}
+                  <span class="sg-tag">{{ grp }}</span>
+                  {% else %}
+                  <span class="text-muted" style="font-size:12px;">—</span>
+                  {% endfor %}
+                </td>
                 <td style="font-size: 12px; color: #64748B;">{{ provision.provisioned_at }}</td>
                 <td>
-                  <form action="/admin/revoke-ec2" method="POST" style="margin:0;"
-                    onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to completely revoke {{ provision.username }}\'s access on {{ provision.instance_name }}? This will delete their Linux user account on the server.', () => form.submit());">
-                    <input type="hidden" name="username" value="{{ provision.username }}">
-                    <input type="hidden" name="instance_id" value="{{ provision.instance_id }}">
-                    <input type="hidden" name="instance_ip" value="{{ provision.instance_ip }}">
-                    <input type="hidden" name="instance_name" value="{{ provision.instance_name }}">
-                    <button type="submit" class="btn-danger-custom"
-                      style="padding: 4px 10px; font-size: 12px;">Revoke</button>
-                  </form>
+                  <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn-outline-dark-modern"
+                      style="padding: 4px 10px; font-size: 12px;"
+                      onclick='openEditGroupsModal({{ {
+                        "username": provision.username,
+                        "instance_id": provision.instance_id,
+                        "instance_ip": provision.instance_ip,
+                        "instance_name": provision.instance_name,
+                        "region": provision.region,
+                        "linux_groups": provision.get("linux_groups", [])
+                      } | tojson }})'>Edit Groups</button>
+                    <form action="/admin/revoke-ec2" method="POST" style="margin:0;"
+                      onsubmit="event.preventDefault(); const form = this; showConfirm('Are you sure you want to completely revoke {{ provision.username }}\'s access on {{ provision.instance_name }}? This will delete their Linux user account on the server.', () => form.submit());">
+                      <input type="hidden" name="username" value="{{ provision.username }}">
+                      <input type="hidden" name="instance_id" value="{{ provision.instance_id }}">
+                      <input type="hidden" name="instance_ip" value="{{ provision.instance_ip }}">
+                      <input type="hidden" name="instance_name" value="{{ provision.instance_name }}">
+                      <input type="hidden" name="region" value="{{ provision.region }}">
+                      <button type="submit" class="btn-danger-custom"
+                        style="padding: 4px 10px; font-size: 12px;">Revoke</button>
+                    </form>
+                  </div>
                 </td>
               </tr>
               {% endfor %}
@@ -432,6 +475,57 @@
   </div>
 </div>
 
+<!-- Edit Groups Modal -->
+<div class="modal-overlay" id="editGroupsModal" onclick="closeModalOnOverlay(event, 'editGroupsModal')">
+  <div class="modal-container-custom">
+    <div class="modal-header-custom">
+      <h5 class="modal-title-custom">Edit Linux Groups</h5>
+      <button type="button" class="modal-close-custom" onclick="closeModals()">&times;</button>
+    </div>
+    <form action="/admin/update-groups" method="POST"
+      onsubmit="event.preventDefault(); const form = this; showConfirm('Update group membership for ' + document.getElementById('editGroupsUsernameDisplay').value + ' on ' + document.getElementById('editGroupsInstanceDisplay').value + '?', () => form.submit());">
+      <input type="hidden" name="username" id="editGroupsUsername">
+      <input type="hidden" name="instance_id" id="editGroupsInstanceId">
+      <input type="hidden" name="instance_ip" id="editGroupsInstanceIp">
+      <input type="hidden" name="instance_name" id="editGroupsInstanceName">
+      <input type="hidden" name="region" id="editGroupsRegion">
+
+      <div class="mb-3">
+        <label class="form-label-custom">User</label>
+        <input type="text" class="form-control-custom" id="editGroupsUsernameDisplay" disabled>
+      </div>
+      <div class="mb-3">
+        <label class="form-label-custom">Instance</label>
+        <input type="text" class="form-control-custom" id="editGroupsInstanceDisplay" disabled>
+      </div>
+      <div class="mb-4">
+        <label class="form-label-custom">Linux Groups</label>
+        <div style="display:flex; gap:14px; padding:10px 0; flex-wrap:wrap; align-items:center;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#334155; font-weight:500; cursor:pointer;">
+            <input type="checkbox" name="linux_groups" value="adm" id="editGroupsAdm"> adm
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#334155; font-weight:500; cursor:pointer;">
+            <input type="checkbox" name="linux_groups" value="www-data" id="editGroupsWwwData"> www-data
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#334155; font-weight:500; cursor:pointer;">
+            <input type="checkbox" name="linux_groups" value="claude-users" id="editGroupsClaudeUsers"> claude-users
+          </label>
+          <span style="width:1px; height:16px; background:#E2E8F0;"></span>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#E11D48; font-weight:600; cursor:pointer;"
+            title="Grants full root access via sudo. Only enable if this user genuinely needs it.">
+            <input type="checkbox" name="linux_groups" value="sudo" id="editGroupsSudo"> ⚠️ sudo
+          </label>
+        </div>
+        <div class="text-muted" style="font-size:11px;">Unchecking a group removes the user from it on the instance immediately. <span style="color:#E11D48;">sudo grants full root.</span></div>
+      </div>
+      <div class="d-flex justify-content-end align-items-center">
+        <button type="button" class="btn-outline-dark-modern me-3" onclick="closeModals()">Cancel</button>
+        <button type="submit" class="btn-dark-modern">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
   function openTab(evt, tabId) {
     let tabContents = document.getElementsByClassName("tab-content");
@@ -476,9 +570,31 @@
     modal.style.display = 'flex';
   }
 
+  function openEditGroupsModal(provision) {
+    document.getElementById('editGroupsUsername').value = provision.username;
+    document.getElementById('editGroupsInstanceId').value = provision.instance_id;
+    document.getElementById('editGroupsInstanceIp').value = provision.instance_ip;
+    document.getElementById('editGroupsInstanceName').value = provision.instance_name;
+    document.getElementById('editGroupsRegion').value = provision.region;
+
+    document.getElementById('editGroupsUsernameDisplay').value = provision.username;
+    document.getElementById('editGroupsInstanceDisplay').value =
+      `${provision.instance_name} (${provision.region})`;
+
+    const currentGroups = provision.linux_groups || [];
+    document.getElementById('editGroupsAdm').checked = currentGroups.includes('adm');
+    document.getElementById('editGroupsWwwData').checked = currentGroups.includes('www-data');
+    document.getElementById('editGroupsClaudeUsers').checked = currentGroups.includes('claude-users');
+    document.getElementById('editGroupsSudo').checked = currentGroups.includes('sudo');
+
+    const modal = document.getElementById('editGroupsModal');
+    modal.style.display = 'flex';
+  }
+
   function closeModals() {
     document.getElementById('addRegionModal').style.display = 'none';
     document.getElementById('editRegionModal').style.display = 'none';
+    document.getElementById('editGroupsModal').style.display = 'none';
   }
 
   function closeModalOnOverlay(event, id) {

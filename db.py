@@ -574,7 +574,7 @@ def get_user_provisioned_instances(username):
     """Retrieve unique active EC2 instances a user has been provisioned on from audit log."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT action, details FROM audit_log WHERE target_user = ? AND action IN ('ec2_provision', 'ec2_revoke') ORDER BY id ASC",
+        "SELECT action, details FROM audit_log WHERE target_user = ? AND action IN ('ec2_provision', 'ec2_revoke', 'ec2_update_groups') ORDER BY id ASC",
         (username,)
     ).fetchall()
     conn.close()
@@ -591,6 +591,12 @@ def get_user_provisioned_instances(username):
                 instances[instance_id] = details
             elif row["action"] == "ec2_revoke" and details.get("success", False):
                 instances.pop(instance_id, None)
+            elif row["action"] == "ec2_update_groups" and details.get("success", False):
+                # Patch the linux_groups on the existing entry (if it's still active).
+                # Doesn't create or remove a provision — just updates its group list.
+                if instance_id in instances:
+                    instances[instance_id] = dict(instances[instance_id])
+                    instances[instance_id]["linux_groups"] = details.get("linux_groups", [])
                 
     return list(instances.values())
 
@@ -599,7 +605,7 @@ def get_all_active_ec2_provisions():
     """Retrieve all active EC2 provisions across all users."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT target_user, action, details, timestamp FROM audit_log WHERE action IN ('ec2_provision', 'ec2_revoke') ORDER BY id ASC"
+        "SELECT target_user, action, details, timestamp FROM audit_log WHERE action IN ('ec2_provision', 'ec2_revoke', 'ec2_update_groups') ORDER BY id ASC"
     ).fetchall()
     conn.close()
     
@@ -627,6 +633,14 @@ def get_all_active_ec2_provisions():
                 active_provisions[target_user][instance_id] = details
             elif row["action"] == "ec2_revoke" and details.get("success", False):
                 active_provisions[target_user].pop(instance_id, None)
+            elif row["action"] == "ec2_update_groups" and details.get("success", False):
+                # Patch linux_groups on the existing active entry only — doesn't
+                # create a new "provision" row and doesn't affect provisioned_at.
+                existing = active_provisions[target_user].get(instance_id)
+                if existing is not None:
+                    existing = dict(existing)
+                    existing["linux_groups"] = details.get("linux_groups", [])
+                    active_provisions[target_user][instance_id] = existing
                 
     # Flatten out into a single list
     flat_provisions = []
