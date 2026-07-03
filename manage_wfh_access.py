@@ -62,7 +62,7 @@ def update_allowed_ips_for_web_access(access_type, ip_to_allow_log_access, emp_n
 
         import subprocess
         command = "mv {} {} && /usr/bin/sudo -S /usr/sbin/nginx -s reload".format(new_cfg_file_path, cfg_file_path)
-        op = subprocess.Popen([command], shell=True)
+        subprocess.Popen([command], shell=True)
         status = True
     except Exception as e:
         logger.exception("Exception: {}".format(e))

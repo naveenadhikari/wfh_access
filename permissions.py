@@ -44,8 +44,4 @@ def has_subadmin_access(perms):
     return has_any_permission(perms, *PERMISSION_KEYS)
 
 
-def permission_labels(perms):
-    """Human-readable list of granted permissions."""
-    if not perms:
-        return []
-    return [label for key, label in PERMISSION_DEFINITIONS if perms.get(key)]
+

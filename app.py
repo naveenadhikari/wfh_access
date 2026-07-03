@@ -40,13 +40,14 @@ from cryptography.hazmat.primitives import serialization
 from ec2_helper import list_regions, list_instances_in_region
 from ec2_provision import provision_user_on_instance
 
+
 from auth import verify_admin, verify_wfh_user, hash_password, check_password, generate_otp_seed
 from db import (
     get_db, add_audit_entry, get_recent_audit_entries, get_user_ssh_keys, add_user_ssh_key,
     delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin,
-    update_admin_permissions, generate_admin_api_token, get_admin_by_api_token, delete_admin,
-    get_global_setting, set_global_setting, get_wfh_user, get_employee_by_api_token, get_all_wfh_users,
-    generate_employee_api_token, update_employee_permissions, get_all_active_ec2_provisions,
+    get_admin_by_api_token, get_global_setting, set_global_setting, get_wfh_user, 
+    get_employee_by_api_token, get_all_wfh_users, generate_employee_api_token, 
+    update_employee_permissions, get_all_active_ec2_provisions,
 )
 from config_writer import add_user_to_config, user_exists, list_users, get_access_cfg
 from manage_wfh_access import grant_authorized_access
@@ -611,8 +612,7 @@ def add_user():
 
     if request.method == "POST":
         username = request.form.get("username", "").strip().lower()
-        """ Get the server2_username from the form """
-        server2_username = request.form.get("server2_username", "").strip() or None
+
         allow_log = bool(request.form.get("allow_log_access"))
         allow_metrics = bool(request.form.get("allow_metrics_access"))
         allow_hp_agent = bool(request.form.get("allow_hp_agent_access"))

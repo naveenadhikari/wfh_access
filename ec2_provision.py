@@ -1,15 +1,10 @@
 """
 ec2_provision.py
------------------
-Provisions a new Linux user on a target EC2 instance via SSH.
-
-Does 4 things automatically:
   1. Creates the Linux user account
   2. Adds their SSH public key
   3. Configures Google Authenticator OTP for that user
   4. Ensures PAM + sshd are configured for key+OTP login (one-time per instance)
 
-Called from your Flask add_user route — no IPs hardcoded here.
 """
 import paramiko
 import os
@@ -61,7 +56,8 @@ def run_cmd(client, command, use_sudo=True):
 def create_linux_user(client, username):
     exit_code, out, err = run_cmd(client, f"id {username}", use_sudo=False)
     if exit_code == 0:
-        print(f"  [SKIP] User '{username}' already exists")
+        print(f"  [SKIP] User '{username}' already exists. Enforcing /bin/bash shell.")
+        run_cmd(client, f"usermod -s /bin/bash {username}")
         return True
 
     exit_code, out, err = run_cmd(client, f"useradd -m -s /bin/bash {username}")
@@ -82,6 +78,7 @@ def add_ssh_key(client, username, ssh_public_key):
 
     # Create .ssh directory with correct permissions and enforce home dir permissions
     for cmd in [
+        f"mkdir -p /home/{username}",
         f"chown {username}:{username} /home/{username}",
         f"chmod 755 /home/{username}",
         f"mkdir -p /home/{username}/.ssh",

@@ -64,73 +64,7 @@
             </div>
         </div>
 
-        {% if provisioned_instances %}
-        <!-- Section 2: Provisioned EC2 Instances & OTP Setup -->
-        <div class="card">
-            <div class="card-header">
-                <h3>Provisioned EC2 Instances & Access Guide</h3>
-            </div>
-            <div class="card-body">
-                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 20px;">
-                    You have been provisioned on the following EC2 instances. To connect, you will need your <strong>Private SSH Key</strong> and your <strong>Google Authenticator OTP</strong> code.
-                </p>
 
-                <div class="tabs">
-                    <button class="tab-btn active" onclick="openTab(event, 'tab-ssh')">Connect via SSH</button>
-                    <button class="tab-btn" onclick="openTab(event, 'tab-qr')">Authenticator QR Code</button>
-                </div>
-
-                <!-- Connect via SSH Tab -->
-                <div id="tab-ssh" class="tab-content active">
-                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 15px; font-weight: 600; color: var(--text-main);">SSH Access Commands</h4>
-                    <div style="display: flex; flex-direction: column; gap: 16px;">
-                        {% for instance in provisioned_instances %}
-                        <div style="background: white; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                                <strong style="font-size: 14px; color: #0F172A;">{{ instance.get('instance_name', 'Unknown') }}</strong>
-                                <span style="font-size: 12px; color: #64748B; background: #F1F5F9; padding: 2px 8px; border-radius: 12px;">{{ instance.get('region', 'Unknown Region') }}</span>
-                            </div>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">1. First, secure your downloaded private key (run this once):</p>
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                            <code id="chmod-cmd-{{ loop.index }}" style="flex: 1; padding: 10px; background: #1E293B; color: #E2E8F0; border-radius: 6px; font-size: 13px;">chmod 600 &lt;path-to-private-key&gt;</code>
-                            <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('chmod-cmd-{{ loop.index }}').innerText); alert('chmod command copied!');">Copy</button>
-                        </div>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 8px;">2. Then connect via SSH:</p>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <code id="ssh-cmd-{{ loop.index }}" style="flex: 1; padding: 10px; background: #1E293B; color: #E2E8F0; border-radius: 6px; font-size: 13px;">ssh -i &lt;path-to-private-key&gt; {{ username }}@{{ instance.get('instance_ip', 'IP_ADDRESS') }}</code>
-                            <button class="btn-secondary" style="padding: 8px 12px;" onclick="navigator.clipboard.writeText(document.getElementById('ssh-cmd-{{ loop.index }}').innerText); alert('SSH command copied!');">Copy</button>
-                        </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Authenticator QR Code Tab -->
-                <div id="tab-qr" class="tab-content">
-                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 15px; font-weight: 600; color: var(--text-main);">Setup Two-Factor Authentication</h4>
-                    <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 20px;">
-                        Scan this QR code using Google Authenticator or Authy to configure your OTP token.
-                    </p>
-                    <div style="background: #F8FAFC; border: 1px solid var(--border); padding: 24px; border-radius: 8px; text-align: center; margin-bottom: 24px;">
-                        {% if qr_code_b64 %}
-                        <img src="data:image/png;base64,{{ qr_code_b64 }}" alt="OTP QR Code" style="background: white; padding: 12px; border-radius: 8px; border: 1px solid var(--border); max-width: 200px;">
-                        {% else %}
-                        <div style="padding: 24px; color: #64748B;">No QR code available. Please ask an admin to reset your OTP seed.</div>
-                        {% endif %}
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: white; border: 1px solid var(--border); border-radius: 8px;">
-                        <div>
-                            <strong style="display: block; font-size: 12px; color: #64748B; margin-bottom: 4px;">Manual Entry Key:</strong>
-                            <code style="font-size: 14px; font-weight: 700; color: #0F172A; letter-spacing: 1px;">{{ user_info.get('otpSeed', 'Not generated') }}</code>
-                        </div>
-                        {% if user_info.get('otpSeed') %}
-                        <button class="btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="navigator.clipboard.writeText('{{ user_info.get('otpSeed') }}'); alert('OTP Key copied!');">Copy Key</button>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
 
         <!-- Section 1: Access Status -->
         {% if access_result %}
@@ -270,7 +204,7 @@
                     </p>
                     <div
                         style="background-color: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; margin-bottom: 16px;">
-                        ssh -i ~/Downloads/id_ed25519 {{ username }}@claude-server.yourdomain.com
+                        ssh -i ~/Downloads/id_ed25519 {{ username }}@server-ip-address
                     </div>
                 </div>
 
@@ -289,7 +223,7 @@
                         following command, adjusting the path to where your key is saved.</p>
                     <div
                         style="background-color: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; margin-bottom: 16px;">
-                        ssh -i %USERPROFILE%\Downloads\id_ed25519 {{ username }}@claude-server.yourdomain.com
+                        ssh -i %USERPROFILE%\Downloads\id_ed25519 {{ username }}@server-ip-address
                     </div>
                 </div>
 
@@ -309,7 +243,7 @@
                     <ul
                         style="font-size: 15px; color: var(--text-muted); margin-top: 0; margin-bottom: 16px; padding-left: 20px;">
                         <li style="margin-bottom: 4px;">Open PuTTY and go to <strong>Session</strong>. Enter
-                            <code>claude-server.yourdomain.com</code> in the Host Name box.
+                            <code>server.yourdomain.com or server-ip-address</code> in the Host Name box.
                         </li>
                         <li style="margin-bottom: 4px;">Navigate to <strong>Connection</strong> &gt;
                             <strong>Data</strong> and enter <code>{{ username }}</code> in the "Auto-login username"

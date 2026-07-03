@@ -103,7 +103,7 @@
             <a href="{{ url_for('view_users') }}" class="menu-item {% if request.endpoint in ['view_users', 'edit_user'] %}active{% endif %}">View Users</a>
             <a href="{{ url_for('view_audit_log') }}" class="menu-item {% if request.endpoint == 'view_audit_log' %}active{% endif %}">Audit Log</a>
             <div class="menu-divider"></div>
-            <a href="{{ url_for('view_regions') }}" class="menu-item {% if request.endpoint == 'view_regions' %}active{% endif %}">AWS Region Management</a>
+            <a href="{{ url_for('view_regions') }}" class="menu-item {% if request.endpoint == 'view_regions' %}active{% endif %}">AWS Management</a>
             <a href="/launch/svrmetrics" target="_blank" class="menu-item">Server Metrics & Monitoring</a>
         </div>
     </div>

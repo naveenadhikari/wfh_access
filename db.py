@@ -255,14 +255,6 @@ def get_recent_audit_entries(limit=20):
     return rows
 
 
-def get_role_templates():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM role_templates")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
 
 def seed_role_templates():
     """Insert default role templates if they don't already exist."""
@@ -353,31 +345,6 @@ def get_admin_by_api_token(token):
         return d
     return None
 
-
-def update_admin_permissions(username, role, permissions):
-    conn = get_db()
-    conn.execute(
-        "UPDATE admins SET role = ?, permissions = ? WHERE username = ?",
-        (role, json.dumps(permissions), username)
-    )
-    conn.commit()
-    conn.close()
-
-
-def generate_admin_api_token(username):
-    token = secrets.token_hex(32)
-    conn = get_db()
-    conn.execute("UPDATE admins SET api_token = ? WHERE username = ?", (token, username))
-    conn.commit()
-    conn.close()
-    return token
-
-
-def delete_admin(username):
-    conn = get_db()
-    conn.execute("DELETE FROM admins WHERE username = ?", (username,))
-    conn.commit()
-    conn.close()
 
 
 # ---------------------------------------------------------------------------

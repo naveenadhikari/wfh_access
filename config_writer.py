@@ -92,10 +92,6 @@ def update_user_in_config(username, user_entry):
     )
 
 
-def delete_user_from_config(username):
-    """Delete a user from the database."""
-    delete_wfh_user(username)
-
 
 def user_exists(username):
     return wfh_user_exists(username)
