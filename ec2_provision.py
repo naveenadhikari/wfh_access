@@ -121,7 +121,7 @@ def set_initial_password(client, username):
 
 
 # ─────────────────────────────────────────────
-# STEP 2 — ADD SSH PUBLIC KEY (via SFTP)
+# STEP 2 — ADD SSH PUBLIC KEY 
 # ─────────────────────────────────────────────
 
 def add_ssh_key(client, username, ssh_public_key):
@@ -302,8 +302,7 @@ def provision_user_on_instance(public_ip, username, ssh_public_key, otp_seed,
     the new user should also be added to, e.g. ["adm", "www-data", "claude-users"].
     `set_password`: if True (default), sets the account's initial Unix password
     to the username itself, matching the original bash script's behavior.
-    This is intentionally weak/guessable — it exists only as a legacy fallback.
-    Returns a dict with status of each step.
+    Returns a dict with success status and details of each step.
     """
     result = {
         "success": False,
@@ -450,7 +449,7 @@ def revoke_user_on_instance(public_ip, username, key_path=MASTER_KEY_PATH, ssh_u
 
 
 # ─────────────────────────────────────────────
-# EDIT GROUPS — reconcile a user's group membership after the fact
+# EDIT GROUPS 
 # ─────────────────────────────────────────────
 
 def _reconcile_groups(client, username, desired_groups):
@@ -458,7 +457,7 @@ def _reconcile_groups(client, username, desired_groups):
     Make the user's membership in ALLOWED_LINUX_GROUPS match `desired_groups`
     exactly — adds any allowed group that's missing, removes any allowed
     group that's no longer wanted. Groups outside ALLOWED_LINUX_GROUPS
-    (e.g. the user's own primary group) are never touched.
+    are never touched.
 
     Returns (success_bool, details_dict) where details_dict has
     "added", "removed", and "failed" lists.

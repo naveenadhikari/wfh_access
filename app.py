@@ -75,14 +75,14 @@ def load_env_file():
 load_env_file()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 migrate_db()
 
 
-SVRMETRICS_URL     = os.environ.get("SVRMETRICS_URL", "http://localhost:6400")
-SVRMETRICS_API_KEY = os.environ.get("SVRMETRICS_API_KEY", "svrmetrics-api-key-change-this")
+SVRMETRICS_URL     = os.environ.get("SVRMETRICS_URL")
+SVRMETRICS_API_KEY = os.environ.get("SVRMETRICS_API_KEY")
 
-SSO_SECRET = os.environ.get("SSO_SECRET", "a1b2c34d5e6f7g8h9i0jklmnopqrstuvwx")  
+SSO_SECRET = os.environ.get("SSO_SECRET")  
 
 @app.route("/launch/svrmetrics")
 def launch_svrmetrics():
