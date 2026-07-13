@@ -92,7 +92,7 @@ def grant_authorized_access(emp_name, ip_to_allow):
     logger.info(f"[PRODUCTION MODE] Granting access for {emp_name} at IP {ip_to_allow}")
     access_cfg = get_access_cfg()
     
-    # Check if the user is an admin or superadmin to grant full automatic access
+    # Check if the user is an admin to grant full automatic access
     is_admin = False
     try:
         from db import get_admin

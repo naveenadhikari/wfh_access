@@ -7,6 +7,7 @@ PERMISSION_DEFINITIONS = [
     ("can_add_user", "Add New Users"),
     ("can_manage_users", "Manage Users (Edit/Delete/Regions)"),
     ("can_view_users_and_logs", "View User List & Audit Logs"),
+    ("can_manage_aws", "Manage AWS Regions & EC2 (edit only)"),
 ]
 
 PERMISSION_KEYS = [key for key, _ in PERMISSION_DEFINITIONS]

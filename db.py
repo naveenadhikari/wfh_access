@@ -40,7 +40,7 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             otp_seed TEXT NOT NULL,
-            role TEXT DEFAULT 'superadmin',
+            role TEXT DEFAULT 'admin',
             permissions TEXT DEFAULT '{}',
             api_token TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -138,18 +138,22 @@ def migrate_db():
         conn.execute("ALTER TABLE wfh_users ADD COLUMN admin_permissions TEXT DEFAULT '{}'")
     if "api_token" not in cols:
         conn.execute("ALTER TABLE wfh_users ADD COLUMN api_token TEXT")
-        
+    if "cidr_preference" not in cols:
+        conn.execute("ALTER TABLE wfh_users ADD COLUMN cidr_preference TEXT DEFAULT '/32'")
+
     audit_cols = {row[1] for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
     if "ip_address" not in audit_cols:
         conn.execute("ALTER TABLE audit_log ADD COLUMN ip_address TEXT")
 
     admin_cols = {row[1] for row in conn.execute("PRAGMA table_info(admins)").fetchall()}
     if "role" not in admin_cols:
-        conn.execute("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'superadmin'")
+        conn.execute("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'admin'")
     if "permissions" not in admin_cols:
         conn.execute("ALTER TABLE admins ADD COLUMN permissions TEXT DEFAULT '{}'")
     if "api_token" not in admin_cols:
         conn.execute("ALTER TABLE admins ADD COLUMN api_token TEXT")
+    # Collapse the legacy 'superadmin' tier: there is only one admin role now.
+    conn.execute("UPDATE admins SET role = 'admin' WHERE role = 'superadmin'")
     
     # New table migration
     conn.execute("""
@@ -160,6 +164,20 @@ def migrate_db():
             ssh_public_key TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (username) REFERENCES wfh_users(username)
+        )
+    """)
+
+    # --- Token-based auth sessions (replaces Flask cookie session) ---
+    # One row per issued X-AUTH-TOKEN. A row is valid until expires_at.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            token TEXT PRIMARY KEY,
+            actor_type TEXT NOT NULL,          -- 'admin' or 'employee'
+            username TEXT NOT NULL,
+            role TEXT,                          -- 'admin', or 'subadmin'/'user' for employees
+            permissions TEXT DEFAULT '{}',      -- JSON blob of effective permissions
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL
         )
     """)
     
@@ -253,6 +271,35 @@ def get_recent_audit_entries(limit=20):
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+# Login/SSO records are shown on their own "Login activity" tab; everything
+# else is an "action" (create/delete/provision/upload-ssh/etc.).
+LOGIN_ACTIONS = ("login", "sso_login")
+
+
+def get_audit_entries_page(category="actions", page=1, per_page=15):
+    """
+    Return (rows, total) for one page of the audit log.
+    category: "login" (only login/sso_login) or "actions" (everything else).
+    """
+    if category == "login":
+        where = "action IN ('login', 'sso_login')"
+    else:
+        where = "action NOT IN ('login', 'sso_login')"
+
+    page = max(1, int(page))
+    per_page = max(1, int(per_page))
+    offset = (page - 1) * per_page
+
+    conn = get_db()
+    total = conn.execute(f"SELECT COUNT(*) AS c FROM audit_log WHERE {where}").fetchone()["c"]
+    rows = conn.execute(
+        f"SELECT * FROM audit_log WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        (per_page, offset),
+    ).fetchall()
+    conn.close()
+    return rows, total
 
 
 
@@ -546,6 +593,81 @@ def generate_employee_api_token(username):
     conn.commit()
     conn.close()
     return token
+
+
+# ---------------------------------------------------------------------------
+# Token-based auth sessions (X-AUTH-TOKEN)
+# ---------------------------------------------------------------------------
+DEFAULT_SESSION_TTL_HOURS = 12
+
+
+def create_auth_session(actor_type, username, role=None, permissions=None,
+                        ttl_hours=DEFAULT_SESSION_TTL_HOURS):
+    """
+    Create a new auth session and return its opaque token.
+    The token is what the client sends back in the X-AUTH-TOKEN header.
+    """
+    token = secrets.token_urlsafe(48)
+    perms_json = json.dumps(parse_permissions(permissions or {}))
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO auth_sessions (token, actor_type, username, role, permissions, expires_at) "
+        "VALUES (?, ?, ?, ?, ?, datetime('now', ?))",
+        (token, actor_type, username, role, perms_json, f"+{int(ttl_hours)} hours"),
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+
+def get_auth_session(token):
+    """
+    Return the session dict for a still-valid token, or None.
+    Expired tokens are treated as absent (and never returned).
+    """
+    if not token:
+        return None
+    conn = get_db()
+    row = conn.execute(
+        "SELECT token, actor_type, username, role, permissions, created_at, expires_at "
+        "FROM auth_sessions WHERE token = ? AND expires_at > datetime('now')",
+        (token,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["permissions"] = parse_permissions(d.get("permissions"))
+    return d
+
+
+def delete_auth_session(token):
+    """Revoke a single token (logout)."""
+    if not token:
+        return
+    conn = get_db()
+    conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+
+
+def delete_sessions_for_user(actor_type, username):
+    """Revoke every active token for a given actor (e.g. when perms change)."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM auth_sessions WHERE actor_type = ? AND username = ?",
+        (actor_type, username),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_expired_auth_sessions():
+    """Housekeeping: drop tokens past their expiry."""
+    conn = get_db()
+    conn.execute("DELETE FROM auth_sessions WHERE expires_at <= datetime('now')")
+    conn.commit()
+    conn.close()
 
 
 def get_all_ssh_key_status():

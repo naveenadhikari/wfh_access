@@ -35,7 +35,30 @@ def connect_to_instance(public_ip, key_path=MASTER_KEY_PATH, ssh_user=MASTER_SSH
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     key = paramiko.RSAKey.from_private_key_file(key_path)
-    client.connect(hostname=public_ip, username=ssh_user, pkey=key, timeout=timeout)
+    key_name = os.path.basename(key_path)
+    try:
+        client.connect(hostname=public_ip, username=ssh_user, pkey=key, timeout=timeout)
+    except paramiko.AuthenticationException:
+        # The instance rejected the master key. Almost always means the instance
+        # was launched with a different AWS key pair, so it doesn't trust ours.
+        raise Exception(
+            f"SSH authentication was refused by {public_ip} for user '{ssh_user}'. "
+            f"The instance does not trust the master key ({key_name}). Launch the "
+            f"instance with the master key pair, or add the master public key to "
+            f"'/home/{ssh_user}/.ssh/authorized_keys' on the instance, then retry."
+        )
+    except paramiko.ssh_exception.NoValidConnectionsError:
+        raise Exception(
+            f"Could not open an SSH connection to {public_ip}:22. Check that the "
+            f"instance is running and its security group allows inbound SSH (port 22) "
+            f"from this server."
+        )
+    except Exception as e:
+        # socket.timeout, DNS failure, "N/A" IP for a stopped instance, etc.
+        raise Exception(
+            f"Could not reach {public_ip} over SSH ({e}). Confirm the instance is "
+            f"running, has a reachable public IP, and allows inbound SSH."
+        )
     return client
 
 
