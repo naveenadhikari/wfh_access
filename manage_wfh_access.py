@@ -1,11 +1,9 @@
 import os
 import logging
-from flask import Flask, request, jsonify
 
 import boto3
 from botocore.exceptions import ClientError
 
-app = Flask(__name__)
 logger=logging.getLogger("")
 logger.setLevel(logging.INFO)
 consoleHandler=logging.StreamHandler()
@@ -227,11 +225,3 @@ def open_ports_for_acces(emp_name, ip_to_allow, ports_to_open, security_group_id
             logger.error("EXCEPTION: {}".format(e))
     resp = {"openedCt": succeeded_ct, "failedToOpenCt": failed_ct, "alreadyOpenedCt": already_opened}
     return resp
-
-
-
-
-if __name__ == "__main__":
-    import os
-    PORT = os.environ.get("PORT", 6200)
-    app.run(host='0.0.0.0', port=int(PORT))

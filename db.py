@@ -181,6 +181,19 @@ def migrate_db():
         )
     """)
     
+    # --- Structured diagnostic events (surfaced in the in-app Diagnostics tab) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS debug_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            level TEXT NOT NULL DEFAULT 'INFO',
+            category TEXT NOT NULL,
+            actor TEXT,
+            message TEXT NOT NULL,
+            details TEXT,
+            timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Migrate old keys to new table
     users_with_keys = conn.execute(
         "SELECT username, ssh_public_key, ssh_key_updated_at FROM wfh_users WHERE ssh_public_key IS NOT NULL AND ssh_public_key != ''"
@@ -255,6 +268,72 @@ def add_audit_entry(admin_username, target_user, action, details=None, ip_addres
     conn.close()
 
 
+# ---------------------------------------------------------------------------
+# Diagnostic (debug) logs — structured events for the in-app Diagnostics tab.
+# ---------------------------------------------------------------------------
+DEBUG_LOG_CATEGORIES = ("auth", "user", "aws", "provision", "system", "error")
+
+
+def add_debug_log(level, category, actor, message, details=None):
+    """Insert one diagnostic event. `details` is any JSON-serializable value."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO debug_logs (level, category, actor, message, details) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (level, category, actor, message,
+             json.dumps(details) if details is not None else None),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_debug_logs_page(category=None, level=None, page=1, per_page=25):
+    """Return (rows, total) for one page of diagnostic events, newest first."""
+    clauses, params = [], []
+    if category and category != "all":
+        clauses.append("category = ?"); params.append(category)
+    if level and level != "all":
+        clauses.append("level = ?"); params.append(level)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    page = max(1, int(page))
+    per_page = max(1, int(per_page))
+    offset = (page - 1) * per_page
+
+    conn = get_db()
+    total = conn.execute(
+        f"SELECT COUNT(*) AS c FROM debug_logs {where}", params
+    ).fetchone()["c"]
+    rows = conn.execute(
+        f"SELECT * FROM debug_logs {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        (*params, per_page, offset),
+    ).fetchall()
+    conn.close()
+    return rows, total
+
+
+def delete_old_debug_logs(days):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM debug_logs WHERE timestamp < datetime('now', ?)", (f'-{days} days',))
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+def clear_debug_logs():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM debug_logs")
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
+
 def delete_old_audit_logs(days):
     conn = get_db()
     cur = conn.cursor()
@@ -263,19 +342,6 @@ def delete_old_audit_logs(days):
     conn.commit()
     conn.close()
     return deleted
-
-def get_recent_audit_entries(limit=20):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-
-# Login/SSO records are shown on their own "Login activity" tab; everything
-# else is an "action" (create/delete/provision/upload-ssh/etc.).
-LOGIN_ACTIONS = ("login", "sso_login")
 
 
 def get_audit_entries_page(category="actions", page=1, per_page=15):
@@ -511,15 +577,6 @@ def update_wfh_user(username, allow_log_access, allow_metrics_access, allow_hp_a
                 VALUES (?, ?, ?, ?)
             """, (username, region, json.dumps(cfg["securityGrpIds"]), json.dumps(cfg["portsToOpen"])))
 
-    conn.commit()
-    conn.close()
-
-
-def delete_wfh_user(username):
-    """Delete a WFH user and their region overrides."""
-    conn = get_db()
-    conn.execute("DELETE FROM wfh_user_region_overrides WHERE username = ?", (username,))
-    conn.execute("DELETE FROM wfh_users WHERE username = ?", (username,))
     conn.commit()
     conn.close()
 

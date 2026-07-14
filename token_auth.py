@@ -21,15 +21,7 @@ TOKEN_HEADER = "X-AUTH-TOKEN"
 
 
 def _load_identity():
-    """
-    Resolve the current actor from the X-AUTH-TOKEN header exactly once per
-    request, caching the result on flask.g. Returns a dict or None.
-
-    Permissions are resolved LIVE from the source of truth on every request
-    (not snapshotted into the session at login). This means an admin changing a
-    subadmin's privileges takes effect on the subadmin's very next request —
-    both grants and revocations — without forcing them to log in again.
-    """
+    """Resolve the current request's identity (or None)."""
     if "identity" in g:
         return g.identity
 
@@ -64,11 +56,7 @@ def current_identity():
 
 
 def is_admin_actor(identity):
-    """
-    True for a full admin account. There is only one admin tier and it always
-    holds every privilege — there is no separate 'superadmin' role. Elevated
-    employees ('subadmins') are NOT admins; they carry explicit permissions.
-    """
+    """True if the given identity is an admin actor (any role)."""
     return bool(identity and identity["actor_type"] == "admin")
 
 
@@ -122,11 +110,7 @@ def employee_required(view_func):
 
 
 def require_permission(*perm_names):
-    """
-    Allow the request if the actor holds ANY of the named permissions.
-    Admins always pass (they hold every privilege). Permissioned employees
-    (subadmins) are accepted when they hold one of the named permissions.
-    """
+    """Require at least one of the given permissions (admin or employee)."""
     def decorator(view_func):
         @functools.wraps(view_func)
         def wrapped(*args, **kwargs):

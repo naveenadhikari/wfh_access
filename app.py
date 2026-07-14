@@ -78,10 +78,14 @@ from ec2_helper import list_regions, list_instances_in_region
 from ec2_provision import ALLOWED_LINUX_GROUPS
 
 
-from auth import verify_admin, verify_wfh_user, hash_password, generate_otp_seed
+from auth import (
+    verify_admin, verify_wfh_user, hash_password, generate_otp_seed,
+    login_failure_reason,
+)
+from diagnostics import configure_logging, log_event
 from db import (
     get_db, add_audit_entry, get_user_ssh_keys, add_user_ssh_key,
-    delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins, get_admin,
+    delete_user_ssh_key, get_all_ssh_key_status, migrate_db, get_all_admins,
     get_admin_by_api_token, set_global_setting, get_wfh_user,
     get_employee_by_api_token, get_all_wfh_users, generate_employee_api_token,
     update_employee_permissions, get_all_active_ec2_provisions,
@@ -118,9 +122,11 @@ load_env_file()
 
 # The SPA lives under static/app; static_url_path stays at the Flask default (/static).
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+configure_logging()
 migrate_db()
 delete_expired_auth_sessions()
+log_event("system", "Application started", details={"mock_access": os.environ.get("WFH_MOCK_ACCESS")})
+
 
 SPA_DIR = os.path.join(app.static_folder, "app")
 
@@ -198,7 +204,12 @@ def _grant_employee_access(username):
     ip_to_allow = _client_ip()
 
     def background_task():
-        grant_authorized_access(username, ip_to_allow)
+        try:
+            grant_authorized_access(username, ip_to_allow)
+        except Exception as e:
+            log_event("aws", f"Access provisioning FAILED for '{username}': {e}",
+                      level="ERROR", actor=username,
+                      details={"ip": ip_to_allow, "error": str(e)})
 
     threading.Thread(target=background_task, daemon=True).start()
     return (
@@ -283,6 +294,8 @@ def api_login():
         token = create_auth_session("admin", username, role="admin",
                                     permissions=ALL_PERMISSIONS)
         _whitelist_ip_async(_client_ip(), username)
+        log_event("auth", f"Admin '{username}' logged in successfully",
+                  actor=username, details={"actor_type": "admin", "ip": _client_ip()})
 
         return jsonify({
             "token": token,
@@ -297,6 +310,11 @@ def api_login():
         db_user = get_wfh_user(employee_username) or {}
         permissions = db_user.get("admin_permissions") or {}
         token = create_auth_session("employee", employee_username, permissions=permissions)
+
+        log_event("auth", f"Employee '{employee_username}' logged in successfully",
+                  actor=employee_username,
+                  details={"actor_type": "employee", "ip": _client_ip(),
+                           "role": "subadmin" if any(permissions.values()) else "user"})
 
         access_result = _grant_employee_access(employee_username)
         _whitelist_ip_async(_client_ip(), employee_username)
@@ -319,6 +337,21 @@ def api_login():
             "redirect": "employee",
         })
 
+    # Both admin and employee auth failed — record the precise reason so the
+    # Diagnostics tab shows whether it was the username, password, or OTP.
+    reason = login_failure_reason(employee_username, password, otp)
+    reason_text = {
+        "user_not_found": "no account exists with this username",
+        "bad_password": "incorrect password",
+        "bad_otp": "incorrect OTP / authenticator code (username and password were correct)",
+    }.get(reason, reason)
+    log_event(
+        "auth",
+        f"Login failed for '{username}' — {reason_text}",
+        level="WARN", actor=employee_username,
+        details={"attempted_username": username, "employee_username": employee_username,
+                 "reason": reason, "otp_len": len(otp), "ip": _client_ip()},
+    )
     return jsonify({"error": "Invalid username, password, or OTP."}), 401
 
 
@@ -534,6 +567,42 @@ def _parse_region_overrides(payload):
     return overrides, None
 
 
+def _log_user_saved(action_verb, username, region_overrides, ports_to_open, is_subadmin):
+    """Emit a plain-English Diagnostics event for a create/update, including a
+    per-region security-group summary and a WARN for any region that has a
+    security group but no ports (so nothing would get whitelisted there)."""
+    region_summary = {
+        r: {"security_groups": c.get("securityGrpIds", []),
+            "ports": c.get("portsToOpen", [])}
+        for r, c in (region_overrides or {}).items()
+    }
+    if region_summary:
+        regions_msg = "; ".join(
+            f"{r}: SG[{', '.join(c['security_groups']) or 'none'}] "
+            f"ports[{', '.join(map(str, c['ports'])) or 'none'}]"
+            for r, c in region_summary.items()
+        )
+    else:
+        regions_msg = "no region overrides (uses global defaults)"
+
+    log_event(
+        "user", f"User '{username}' {action_verb} — {regions_msg}",
+        actor=_current_actor(),
+        details={"username": username, "region_overrides": region_summary,
+                 "global_ports": ports_to_open, "is_subadmin": bool(is_subadmin)},
+    )
+    for r, c in region_summary.items():
+        if c["security_groups"] and not c["ports"]:
+            log_event(
+                "user",
+                f"Region '{r}' for '{username}' has security group(s) but NO ports — "
+                f"no IP will be whitelisted there on login. Add ports to fix.",
+                level="WARN", actor=_current_actor(),
+                details={"username": username, "region": r,
+                         "security_groups": c["security_groups"]},
+            )
+
+
 @app.route("/api/admin/add-user", methods=["POST"])
 @require_permission("can_add_user", "can_manage_users")
 def add_user():
@@ -545,14 +614,21 @@ def add_user():
     allow_hp_agent = bool(data.get("allow_hp_agent_access"))
 
     if not username:
+        log_event("user", "User creation failed: username is required",
+                  level="WARN", actor=_current_actor())
         return jsonify({"error": "Username is required."}), 400
     if user_exists(username):
+        log_event("user", f"User creation failed: '{username}' already exists",
+                  level="WARN", actor=_current_actor(), details={"username": username})
         return jsonify({"error": f"User '{username}' already exists."}), 409
 
     ports_to_open = []
     try:
         ports_to_open = [int(p) for p in (data.get("ports_to_open") or []) if str(p).strip()]
     except (ValueError, TypeError):
+        log_event("user", f"User creation failed for '{username}': ports must be numbers",
+                  level="WARN", actor=_current_actor(),
+                  details={"username": username, "ports_to_open": data.get("ports_to_open")})
         return jsonify({"error": "Ports must be numbers e.g. 22,3306"}), 400
 
     plain_password = generate_password()
@@ -579,6 +655,8 @@ def add_user():
 
     region_overrides, err = _parse_region_overrides(data.get("region_overrides"))
     if err:
+        log_event("user", f"User creation failed for '{username}': {err}",
+                  level="WARN", actor=_current_actor(), details={"username": username})
         return jsonify({"error": err}), 400
     if region_overrides:
         user_entry["overRiddenRegionAndCfg"] = region_overrides
@@ -589,6 +667,9 @@ def add_user():
         user_entry["adminPermissions"] = {}
 
     add_user_to_config(username, user_entry)
+
+    _log_user_saved("created", username, region_overrides, ports_to_open,
+                    data.get("is_subadmin"))
 
     add_audit_entry(
         admin_username=_current_actor(),
@@ -658,10 +739,15 @@ def edit_user(username):
     try:
         ports_to_open = [int(p) for p in (data.get("ports_to_open") or []) if str(p).strip()]
     except (ValueError, TypeError):
+        log_event("user", f"User update failed for '{username}': ports must be numbers",
+                  level="WARN", actor=_current_actor(),
+                  details={"username": username, "ports_to_open": data.get("ports_to_open")})
         return jsonify({"error": "Ports must be numbers e.g. 22,3306"}), 400
 
     region_overrides, err = _parse_region_overrides(data.get("region_overrides"))
     if err:
+        log_event("user", f"User update failed for '{username}': {err}",
+                  level="WARN", actor=_current_actor(), details={"username": username})
         return jsonify({"error": err}), 400
 
     cidr_preference = data.get("cidr_preference", "/32")
@@ -693,6 +779,9 @@ def edit_user(username):
 
     from config_writer import update_user_in_config
     update_user_in_config(username, user_entry)
+
+    _log_user_saved("updated", username, region_overrides, ports_to_open,
+                    data.get("is_subadmin"))
 
     add_audit_entry(
         admin_username=_current_actor(),
@@ -800,6 +889,70 @@ def delete_audit_log_data():
         return jsonify({"ok": True, "deleted": deleted,
                         "message": f"Deleted {deleted} audit logs older than {days} days."})
     return jsonify({"error": "days must be a positive integer."}), 400
+
+
+# ---------------------------------------------------------------------------
+# Admin: diagnostics (structured backend event log)
+# ---------------------------------------------------------------------------
+@app.route("/api/admin/debug-logs")
+@require_permission("can_view_users_and_logs")
+def view_debug_logs():
+    from db import get_debug_logs_page, DEBUG_LOG_CATEGORIES
+    category = request.args.get("category", "all")
+    level = request.args.get("level", "all")
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per_page = min(200, max(1, int(request.args.get("per_page", 40))))
+    except (TypeError, ValueError):
+        per_page = 40
+
+    rows, total = get_debug_logs_page(category, level, page, per_page)
+    pages = max(1, (total + per_page - 1) // per_page)
+
+    def serialize(r):
+        d = dict(r)
+        if d.get("details"):
+            try:
+                d["details"] = json.loads(d["details"])
+            except (TypeError, json.JSONDecodeError):
+                d["details"] = {}
+        else:
+            d["details"] = {}
+        return d
+
+    return jsonify({
+        "entries": [serialize(r) for r in rows],
+        "categories": list(DEBUG_LOG_CATEGORIES),
+        "category": category,
+        "level": level,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+    })
+
+
+@app.route("/api/admin/debug-logs/delete", methods=["POST"])
+@require_permission("can_view_users_and_logs")
+def delete_debug_logs():
+    from db import delete_old_debug_logs, clear_debug_logs
+    data = request.get_json(silent=True) or {}
+    if data.get("clear_all"):
+        deleted = clear_debug_logs()
+        return jsonify({"ok": True, "deleted": deleted,
+                        "message": f"Cleared all {deleted} diagnostic log entries."})
+    try:
+        days = int(data.get("days"))
+    except (TypeError, ValueError):
+        days = 0
+    if days and days > 0:
+        deleted = delete_old_debug_logs(days)
+        return jsonify({"ok": True, "deleted": deleted,
+                        "message": f"Deleted {deleted} diagnostic logs older than {days} days."})
+    return jsonify({"error": "Provide a positive 'days' value or clear_all=true."}), 400
 
 
 # ---------------------------------------------------------------------------
@@ -1088,6 +1241,17 @@ def _do_provision(username, instance_id, instance_ip, region, instance_name, sel
         },
         ip_address=_client_ip(),
     )
+    log_event(
+        "provision",
+        f"EC2 provision {'succeeded' if result['success'] else 'FAILED'} for "
+        f"'{username}' on {instance_name} ({instance_ip})",
+        level="INFO" if result["success"] else "ERROR", actor=_current_actor(),
+        details={"instance_id": instance_id, "instance_name": instance_name,
+                 "instance_ip": instance_ip, "region": region,
+                 "linux_groups": selected_groups,
+                 "steps": {k: v for k, v in result.items() if k != "error"},
+                 "error": result.get("error")},
+    )
     if result["success"]:
         return {"ok": True, "message": (
             f"'{username}' provisioned on {instance_name} ({instance_ip}) successfully."
@@ -1333,5 +1497,5 @@ def api_lookup_credentials(username):
 
 
 if __name__ == "__main__":
-    PORT = os.environ.get("ADMIN_PORT", 6300)
-    app.run(host="0.0.0.0", port=int(PORT), debug=True)
+    PORT = os.environ.get("ADMIN_PORT", 6400)
+    app.run(host="0.0.0.0", port=int(PORT), debug=False)

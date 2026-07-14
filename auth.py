@@ -71,6 +71,24 @@ def verify_wfh_user(username, plain_password, user_sent_otp):
     return True
 
 
+def login_failure_reason(username, plain_password, user_sent_otp):
+    """
+    Diagnostics helper: return a short reason code explaining why a WFH-user
+    login would fail — one of 'user_not_found', 'bad_password', 'bad_otp', or
+    'ok'. Used only for logging; it never affects the auth decision.
+    """
+    conn = get_db()
+    row = conn.execute("SELECT * FROM wfh_users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    if row is None:
+        return "user_not_found"
+    if not check_password(plain_password, row["password_hash"]):
+        return "bad_password"
+    if not verify_otp_with_seed(user_sent_otp, row["otp_seed"]):
+        return "bad_otp"
+    return "ok"
+
+
 def verify_admin(username, plain_password, user_sent_otp):
     conn = get_db()
     cur = conn.cursor()

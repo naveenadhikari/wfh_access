@@ -315,6 +315,8 @@ tbody tr:hover { background: var(--surface-2); }
 .badge.yes { background: var(--success-soft); color: var(--success); }
 .badge.no { background: var(--danger-soft); color: var(--danger); }
 .badge.neutral { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
+.badge.danger { background: var(--danger-soft); color: var(--danger); }
+.badge.warn { background: #fef3c7; color: #b45309; }
 .mono { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
 .muted { color: var(--muted); }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }

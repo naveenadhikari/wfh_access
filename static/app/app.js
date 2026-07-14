@@ -80,6 +80,7 @@ const ICONS = {
     shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     key: '<path d="M21 2l-2 2"/><path d="M14.5 6.5l3 3"/><path d="M12.5 8.5L19 2"/><circle cx="7" cy="15" r="4"/><path d="M9.8 12.2L14.5 7.5"/>',
+    bug: '<rect x="8" y="6" width="8" height="14" rx="4"/><path d="M12 6V3"/><path d="M9 3h6"/><path d="M8 10L4 8"/><path d="M8 14H3"/><path d="M8 18l-4 2"/><path d="M16 10l4-2"/><path d="M16 14h5"/><path d="M16 18l4 2"/>',
 };
 function icon(name) {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -205,6 +206,8 @@ function navItems() {
         items.push({ key: "regions", label: "Regions & EC2", hash: "#/regions", icon: "regions" });
     if (hasPerm("can_view_users_and_logs"))
         items.push({ key: "audit-log", label: "Audit Log", hash: "#/audit-log", icon: "audit" });
+    if (hasPerm("can_view_users_and_logs"))
+        items.push({ key: "debug-logs", label: "Diagnostics", hash: "#/debug-logs", icon: "bug" });
     if (hasPerm("can_manage_users") || hasPerm("can_view_users_and_logs"))
         items.push({ key: "admins", label: "Subadmins", hash: "#/admins", icon: "admins" });
     if (hasPerm("can_fetch_credentials"))
@@ -411,6 +414,18 @@ async function renderUsers() {
                 const newestKey = keys[0] ? keys[0].public_key : "";
                 const seed = info.otpSeed || "";
                 const ports = (info.portsToOpen || []).join(", ") || "—";
+                const ov = info.overRiddenRegionAndCfg || {};
+                const ovEntries = Object.entries(ov);
+                const ovCell = ovEntries.length
+                    ? ovEntries.map(([r, c]) => {
+                        const sgs = (c.securityGrpIds || []).join(", ") || "no SG";
+                        const prts = (c.portsToOpen || []).join(", ");
+                        const portTag = prts
+                            ? `<span class="muted">[${esc(prts)}]</span>`
+                            : `<span class="badge warn">no ports</span>`;
+                        return `<div><strong>${esc(r)}</strong>: ${esc(sgs)} ${portTag}</div>`;
+                    }).join("")
+                    : `<span class="muted">—</span>`;
                 const isSub = info.adminPermissions && Object.values(info.adminPermissions).some(Boolean);
                 const sshCell = ks.has_key
                     ? `<span class="badge yes">${ks.key_count} key(s)</span>${newestKey ? " " + copyBtn(newestKey, "Copy") : ""}`
@@ -424,6 +439,7 @@ async function renderUsers() {
                   <td>${boolBadge(info.allowServerMetricsAccess)}</td>
                   <td>${boolBadge(info.allowHpAgentAccess)}</td>
                   <td>${esc(ports)}</td>
+                  <td>${ovCell}</td>
                   <td>${sshCell}</td>
                   <td>${otpCell}</td>
                   <td><div class="actions">
@@ -435,8 +451,8 @@ async function renderUsers() {
             }).join("");
             box.innerHTML = `
               <div class="table-wrap"><table>
-                <thead><tr><th>Username</th><th>Logs</th><th>Metrics</th><th>HP Agent</th><th>Ports</th><th>SSH key</th><th>OTP seed</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="8" class="muted">${filter.trim() ? "No users match your search." : "No users."}</td></tr>`}</tbody>
+                <thead><tr><th>Username</th><th>Logs</th><th>Metrics</th><th>HP Agent</th><th>Ports</th><th>Regions / SGs</th><th>SSH key</th><th>OTP seed</th><th>Actions</th></tr></thead>
+                <tbody>${rows || `<tr><td colspan="9" class="muted">${filter.trim() ? "No users match your search." : "No users."}</td></tr>`}</tbody>
               </table></div>
               ${pagerHtml(page, pages)}`;
 
@@ -1100,6 +1116,114 @@ async function loadAuditPage(category, page) {
 }
 
 /* =========================================================================
+ * Diagnostics (backend event log)
+ * ========================================================================= */
+const DEBUG_PER_PAGE = 40;
+let DEBUG_FILTER = { category: "all", level: "all", page: 1 };
+let DEBUG_AUTO = null; // setInterval handle for auto-refresh
+
+const LEVEL_BADGE = { INFO: "neutral", WARN: "warn", ERROR: "danger" };
+
+async function renderDebugLogs() {
+    const view = mount("debug-logs");
+    // Stop any auto-refresh from a previous visit.
+    if (DEBUG_AUTO) { clearInterval(DEBUG_AUTO); DEBUG_AUTO = null; }
+
+    const cats = ["all", "auth", "user", "aws", "provision", "system", "error"];
+    const levels = ["all", "INFO", "WARN", "ERROR"];
+    view.innerHTML = `
+      ${pageHeader("Diagnostics", "Live backend event log — logins, AWS security-group changes, requests, and errors")}
+      <div class="card">
+        <div class="inline" style="flex-wrap:wrap; gap:12px; align-items:flex-end;">
+          <div>
+            <label class="form-label">Category</label>
+            <select id="dbgCat">${cats.map((c) => `<option value="${c}" ${c === DEBUG_FILTER.category ? "selected" : ""}>${c}</option>`).join("")}</select>
+          </div>
+          <div>
+            <label class="form-label">Level</label>
+            <select id="dbgLevel">${levels.map((l) => `<option value="${l}" ${l === DEBUG_FILTER.level ? "selected" : ""}>${l}</option>`).join("")}</select>
+          </div>
+          <div class="grow-0"><button class="btn secondary" id="dbgRefresh">Refresh</button></div>
+          <div class="grow-0"><label class="checkbox-row" style="margin:0;"><input type="checkbox" id="dbgAuto"> Auto-refresh (5s)</label></div>
+          <div class="grow"></div>
+          <div class="grow-0"><button class="btn danger" id="dbgClear">${icon("trash")}<span>Clear all</span></button></div>
+        </div>
+      </div>
+      <div id="dbgTable"><div class="spinner">Loading…</div></div>`;
+
+    const applyFilters = () => {
+        DEBUG_FILTER.category = document.getElementById("dbgCat").value;
+        DEBUG_FILTER.level = document.getElementById("dbgLevel").value;
+        loadDebugPage(1);
+    };
+    document.getElementById("dbgCat").onchange = applyFilters;
+    document.getElementById("dbgLevel").onchange = applyFilters;
+    document.getElementById("dbgRefresh").onclick = () => loadDebugPage(DEBUG_FILTER.page);
+    document.getElementById("dbgAuto").onchange = (e) => {
+        if (DEBUG_AUTO) { clearInterval(DEBUG_AUTO); DEBUG_AUTO = null; }
+        if (e.target.checked) {
+            DEBUG_AUTO = setInterval(() => {
+                // Only refresh while still on this view.
+                if (location.hash === "#/debug-logs") loadDebugPage(DEBUG_FILTER.page, true);
+                else { clearInterval(DEBUG_AUTO); DEBUG_AUTO = null; }
+            }, 5000);
+        }
+    };
+    document.getElementById("dbgClear").onclick = async () => {
+        if (!confirm("Clear ALL diagnostic log entries? This cannot be undone.")) return;
+        try {
+            const res = await api("POST", "/api/admin/debug-logs/delete", { clear_all: true });
+            toast(res.message, "success");
+            loadDebugPage(1);
+        } catch (e) { toast(e.message, "error"); }
+    };
+
+    loadDebugPage(1);
+}
+
+async function loadDebugPage(page, quiet = false) {
+    DEBUG_FILTER.page = page;
+    const box = document.getElementById("dbgTable");
+    if (!box) return;
+    if (!quiet) box.innerHTML = `<div class="spinner">Loading…</div>`;
+    try {
+        const q = `category=${encodeURIComponent(DEBUG_FILTER.category)}&level=${encodeURIComponent(DEBUG_FILTER.level)}&page=${page}&per_page=${DEBUG_PER_PAGE}`;
+        const d = await api("GET", `/api/admin/debug-logs?${q}`);
+        const rows = d.entries.map((e, i) => {
+            const badge = LEVEL_BADGE[e.level] || "neutral";
+            const hasDetails = e.details && Object.keys(e.details).length > 0;
+            const toggle = hasDetails
+                ? `<button type="button" class="btn small secondary dbg-toggle" data-idx="${i}">Details</button>`
+                : `<span class="muted">—</span>`;
+            const detailsRow = hasDetails
+                ? `<tr class="dbg-details" data-idx="${i}" hidden><td colspan="6">
+                     <pre class="mono" style="margin:0; white-space:pre-wrap; word-break:break-word;">${esc(JSON.stringify(e.details, null, 2))}</pre>
+                   </td></tr>`
+                : "";
+            return `<tr>
+                  <td class="muted" style="white-space:nowrap;">${esc(e.timestamp)}</td>
+                  <td><span class="badge ${badge}">${esc(e.level)}</span></td>
+                  <td><span class="badge neutral">${esc(e.category)}</span></td>
+                  <td>${esc(e.actor || "—")}</td>
+                  <td>${esc(e.message)}</td>
+                  <td>${toggle}</td>
+                </tr>${detailsRow}`;
+        }).join("");
+        box.innerHTML = `
+          <div class="table-wrap"><table>
+            <thead><tr><th>Time</th><th>Level</th><th>Category</th><th>Actor</th><th>Message</th><th></th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="6" class="muted">No diagnostic entries.</td></tr>`}</tbody>
+          </table></div>
+          ${pagerHtml(d.page, d.pages)}`;
+        box.querySelectorAll(".dbg-toggle").forEach((b) => b.onclick = () => {
+            const dr = box.querySelector(`.dbg-details[data-idx="${b.dataset.idx}"]`);
+            if (dr) { dr.hidden = !dr.hidden; b.textContent = dr.hidden ? "Details" : "Hide"; }
+        });
+        wirePager(box, (p) => loadDebugPage(p));
+    } catch (e) { if (!quiet) { box.innerHTML = ""; toast(e.message, "error"); } }
+}
+
+/* =========================================================================
  * Subadmins
  * ========================================================================= */
 async function renderAdmins() {
@@ -1429,6 +1553,7 @@ function route() {
         case "edit-user": return renderEditUser(decodeURIComponent(parts[1] || ""));
         case "regions": return renderRegions();
         case "audit-log": return renderAuditLog();
+        case "debug-logs": return renderDebugLogs();
         case "admins": return renderAdmins();
         case "credentials": return renderCredentials();
         case "employee": return renderEmployee();

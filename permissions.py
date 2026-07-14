@@ -29,11 +29,6 @@ def parse_permissions(raw):
     return {key: bool(data.get(key)) for key in PERMISSION_KEYS}
 
 
-def permissions_from_form(form):
-    """Build a permissions dict from a Flask request form."""
-    return {key: bool(form.get(key)) for key in PERMISSION_KEYS}
-
-
 def has_any_permission(perms, *names):
     if not perms:
         return False
